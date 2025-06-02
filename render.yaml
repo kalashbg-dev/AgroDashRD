@@ -1,0 +1,32 @@
+# Configuración para el despliegue en Render
+services:
+  - type: web
+    name: agrodash-rd
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run app.py --server.port=$PORT --server.address=0.0.0.0
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "true"
+      - key: PYTHONPATH
+        value: /opt/render/project/src
+      - key: STREAMLIT_SERVER_HEADLESS
+        value: "true"
+      - key: STREAMLIT_SERVER_RUN_ON_SAVE
+        value: "false"
+      - key: STREAMLIT_BROWSER_GATHER_USAGE_STATS
+        value: "false"
+    plan: free  # Puedes cambiar a 'standard' o 'hobby' según necesites
+    autoDeploy: true
+    region: oregon  # Puedes cambiarlo a la región más cercana a ti
+    build:
+      dockerfile: Dockerfile
+
+# Configuración de cron jobs (si es necesario)
+crons:
+  - name: update-data
+    schedule: "0 0 * * *"  # Ejecutar diariamente a medianoche
+    command: python scripts/update_data.py
+    envVars:
+      - key: PYTHONPATH
+        value: /opt/render/project/src

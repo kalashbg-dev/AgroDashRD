@@ -1,0 +1,1052 @@
+/* Unified Stylesheet for AgroDashRD - Revised Color Palette */
+
+/* Global Variables - Reverted to styles.css base with adjustments for lightness */
+:root {
+  /* Colores */
+  --primary-color: #5a8f7b; /* Verde bosque sutil */
+  --primary-light: #7fb09c; /* Verde claro */
+  --primary-dark: #44695b;   /* Verde oscuro */
+  --secondary-color: #5eaa64; /* Marrón tierra / naranja oscuro (Original styles.css) */
+  --accent-color: #e8f0e8; /* Un blanco roto/gris claro más agradable que el f1faee */
+  --text-color: #2f4f4f;     /* Gris verdoso oscuro para texto principal */
+  --text-light: #6a6a6a;     /* Gris medio para texto secundario */
+  --highlight-color: #a8dadc; /* Soft highlight (from responsive.css for accents) */
+
+
+  /* Status Colors (from responsive.css for better visual distinction) */
+  --success-color: #2e7d32; /* Verde para éxito */
+  --warning-color: #ff9800; /* Naranja para advertencias */
+  --info-color: #0c5460;     /* Azul petróleo para información */
+  --error-color: #c62828;   /* Rojo para error - mantengo un rojo para el significado */
+
+  /* Fondos */
+  --background-primary: #f8f9fa; /* Fondo principal muy claro (similar a styles.css) */
+  --background-secondary: #f5f7f5; /* Fondo secundario ligeramente gris-verde (similar a styles.css) */
+  --background-card: #ffffff; /* Fondo para tarjetas y elementos principales */
+
+  /* Spacing (adjusted to rem for consistency) */
+  --spacing-xs: 0.25rem; /* 4px */
+  --spacing-sm: 0.5rem;  /* 8px */
+  --spacing-md: 1rem;    /* 16px */
+  --spacing-lg: 1.5rem;  /* 24px */
+  --spacing-xl: 2rem;    /* 32px */
+  --spacing-xxl: 3rem;   /* 48px */
+
+  /* Borders & Radii */
+  --border-radius-xs: 0.25rem; /* 4px */
+  --border-radius-sm: 0.5rem;  /* 8px */
+  --border-radius-md: 0.75rem; /* 12px */
+  --border-radius-lg: 1rem;    /* 16px */
+  --border-radius-xl: 1.5rem;  /* 24px */
+  --border-color-light: #e0e0e0; /* Light gray for borders */
+  --border-color-medium: #d0d0d0; /* Medium gray for borders */
+
+  /* Shadows (consolidated and adjusted) */
+  --shadow-light: rgba(0, 0, 0, 0.08); /* Sombra sutil para la mayoría de los elementos */
+  --shadow-medium: rgba(0, 0, 0, 0.15); /* Sombra media */
+  --shadow-dark: rgba(0, 0, 0, 0.25); /* Sombra oscura */
+  --shadow-sm: 0 1px 3px var(--shadow-light); /* from responsive.css, using var */
+  --shadow-md: 0 3px 6px var(--shadow-medium); /* from responsive.css, using var */
+  --shadow-lg: 0 10px 20px var(--shadow-dark); /* from responsive.css, using var */
+
+
+  /* Fonts */
+  --font-size-base: 1rem; /* 16px */
+  --font-size-sm: 0.9rem;
+  --font-size-lg: 1.1rem;
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  --font-family-base: "Inter", 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; /* Combined */
+
+  /* Transitions */
+  --transition-fast: 0.2s ease-out;
+  --transition-base: 0.3s ease-out;
+  --transition-slow: 0.5s ease-out;
+}
+
+/* Base Styles */
+body {
+color: var(--text-color); /* Using text-color from styles.css */
+font-family: var(--font-family-base);
+line-height: 1.6;
+background: linear-gradient(135deg, var(--background-primary), var(--accent-color));
+}
+
+.stApp {
+font-family: var(--font-family-base);
+background: linear-gradient(135deg, var(--background-primary), var(--accent-color));
+}
+
+/* Animations @keyframes - Consolidated and Renamed */
+@keyframes fadeIn {
+from { opacity: 0; transform: translateY(20px); } /* Combined responsive and styles */
+to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInFromLeft {
+from { transform: translateX(-30px); opacity: 0; }
+to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideInFromRight {
+from { transform: translateX(30px); opacity: 0; }
+to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideInFromTop {
+from { transform: translateY(-30px); opacity: 0; }
+to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes slideInFromBottom {
+from { transform: translateY(30px); opacity: 0; }
+to { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes pulseEffect { /* Renamed from pulse to avoid conflict */
+0% { transform: scale(1); }
+50% { transform: scale(1.03); }
+100% { transform: scale(1); }
+}
+
+@keyframes spin {
+to { transform: rotate(360deg); }
+}
+
+/* Animation Classes */
+.fade-in { animation: fadeIn var(--transition-base); }
+.slide-in-left { animation: slideInFromLeft var(--transition-base); }
+.slide-in-right { animation: slideInFromRight var(--transition-base); }
+.slide-in-top { animation: slideInFromTop var(--transition-base); }
+.slide-in-bottom { animation: slideInFromBottom var(--transition-base); }
+.pulse-effect-class { animation: pulseEffect 2s infinite; } /* Class to apply pulseEffect */
+
+/* Staggered Animations */
+.staggered-animation > * {
+opacity: 0;
+animation: fadeIn var(--transition-base) forwards;
+}
+.staggered-animation > *:nth-child(1) { animation-delay: 0.1s; }
+.staggered-animation > *:nth-child(2) { animation-delay: 0.2s; }
+.staggered-animation > *:nth-child(3) { animation-delay: 0.3s; }
+.staggered-animation > *:nth-child(4) { animation-delay: 0.4s; }
+.staggered-animation > *:nth-child(5) { animation-delay: 0.5s; }
+
+/* Loading Animation */
+.loading-container {
+text-align: center;
+margin: var(--spacing-lg) 0;
+}
+.loading-spinner {
+display: inline-block;
+width: 50px;
+height: 50px;
+border: 3px solid rgba(90, 143, 123, 0.3);
+border-radius: 50%;
+border-top-color: var(--primary-color);
+animation: spin 1s ease-in-out infinite;
+}
+
+/* Animated Metrics */
+.animated-metric {
+  animation: fadeIn var(--transition-base);
+  padding: var(--spacing-md);
+  background-color: var(--background-card);
+  border-radius: var(--border-radius-md);
+  box-shadow: 0 2px 8px var(--shadow-light);
+  text-align: center;
+}
+.animated-metric .label {
+  font-size: var(--font-size-sm);
+  color: var(--text-light);
+  margin-bottom: var(--spacing-xs);
+}
+.animated-metric .value {
+  font-size: 3rem;
+  font-weight: var(--font-weight-bold);
+  color: var(--primary-dark);
+  animation: slideInFromBottom var(--transition-base);
+}
+.animated-metric .delta {
+  font-size: var(--font-size-lg);
+  margin-top: var(--spacing-xs);
+}
+.animated-metric .delta-up {
+  color: var(--success-color);
+  animation: slideInFromBottom var(--transition-base);
+}
+.animated-metric .delta-down {
+  color: var(--error-color);
+  animation: slideInFromTop var(--transition-base);
+}
+.animated-metric .delta-neutral {
+  color: var(--text-light);
+}
+
+/* Headers */
+h1, h2, h3, h4, h5, h6 {
+color: var(--text-color); /* Using text-color from styles.css */
+font-weight: var(--font-weight-semibold);
+margin-bottom: var(--spacing-md);
+}
+
+h1 {
+font-size: calc(var(--font-size-base) * 2);
+border-bottom: 4px solid var(--primary-light);
+padding-bottom: var(--spacing-md);
+margin-bottom: var(--spacing-xl);
+letter-spacing: -0.03em;
+text-shadow: 1px 1px 2px var(--shadow-light);
+animation: slideInFromTop var(--transition-base);
+}
+
+h2 {
+font-size: calc(var(--font-size-base) * 1.5);
+color: var(--primary-dark);
+letter-spacing: -0.01em;
+margin-top: var(--spacing-xl);
+margin-bottom: var(--spacing-md);
+padding-bottom: var(--spacing-sm);
+border-bottom: 2px solid var(--border-color-light);
+animation: slideInFromLeft var(--transition-base);
+}
+
+h3 {
+font-size: calc(var(--font-size-base) * 1.25);
+color: var(--primary-color);
+margin-top: var(--spacing-lg);
+margin-bottom: var(--spacing-sm);
+animation: slideInFromRight var(--transition-base);
+}
+
+/* Cards and Containers */
+.card { /* From responsive.css */
+background-color: var(--background-card);
+border-radius: var(--border-radius-md);
+padding: var(--spacing-md);
+box-shadow: var(--shadow-sm);
+margin-bottom: var(--spacing-md);
+border-left: 4px solid var(--primary-color);
+transition: box-shadow 0.3s ease;
+}
+
+.card:hover {
+box-shadow: var(--shadow-md);
+}
+
+.section-container { /* From styles.css */
+background-color: var(--background-card);
+border-radius: var(--border-radius-lg);
+padding: var(--spacing-xl);
+margin-bottom: var(--spacing-lg);
+box-shadow: 0 4px 12px var(--shadow-light);
+border: 1px solid var(--border-color-light);
+animation: fadeIn var(--transition-base);
+}
+
+.dashboard-agricultor { /* From styles.css */
+background-color: var(--accent-color); /* Adjusted to use accent-color */
+border-left: 6px solid var(--primary-color);
+}
+.analisis-profesional { /* From styles.css */
+background-color: #F0F2F6; /* Keeping specific color for now, can be variable if needed */
+border-left: 6px solid #3c6382; /* Specific color */
+}
+
+/* Filter Control & Info Card */
+.filter-control,
+.info-card { /* From styles.css */
+  background-color: var(--background-card);
+  border-radius: var(--border-radius-md);
+  padding: var(--spacing-lg);
+  margin-bottom: var(--spacing-lg);
+  transition: all var(--transition-base);
+  box-shadow: 0 2px 6px var(--shadow-light);
+  border: 1px solid var(--border-color-light);
+}
+.filter-control:hover,
+.info-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 18px var(--shadow-medium);
+}
+
+/* Main Tabs - Level 1 (styles.css hierarchical approach) */
+.main-tabs { /* From styles.css */
+  display: flex;
+  justify-content: center;
+  gap: var(--spacing-md);
+  margin-bottom: var(--spacing-xxl);
+  padding: var(--spacing-md);
+  border-radius: var(--border-radius-lg);
+  background-color: var(--background-secondary);
+  box-shadow: 0 6px 15px var(--shadow-light);
+  animation: fadeIn var(--transition-base);
+}
+
+/* Hierarchical Tab Styling - Consolidated from all files */
+
+/* Base Tab Styling for all levels */
+div[role="tab"],
+button[role="tab"],
+div.stRadio label {
+  padding: var(--spacing-sm) var(--spacing-md); /* Default padding */
+  border-radius: var(--border-radius-sm) var(--border-radius-sm) 0 0; /* Default radius */
+  background: transparent;
+  border: none;
+  position: relative;
+  transition: color 0.3s ease, background 0.3s ease, transform 0.3s ease, box-shadow 0.3s ease;
+  font-weight: var(--font-weight-medium);
+  color: var(--text-color);
+}
+
+/* Common after-effect for underline */
+div[role="tab"]::after,
+button[role="tab"]::after,
+div.stRadio label::after {
+  content: '';
+  position: absolute;
+  bottom: -2px; /* Adjusted to be visible below the border */
+  left: 0;
+  width: 100%;
+  height: 3px; /* Default thickness */
+  background: var(--primary-color);
+  transform: scaleX(0);
+  transition: transform 0.3s ease;
+}
+
+/* Common Hover Effect */
+div[role="tab"]:hover::after,
+button[role="tab"]:hover::after,
+div.stRadio label:hover::after {
+  transform: scaleX(1);
+}
+
+div[role="tab"]:hover,
+button[role="tab"]:hover,
+div.stRadio label:hover {
+  color: var(--primary-color);
+}
+
+/* Active State for all levels of tabs (buttons and radio labels) */
+button[role="tab"][aria-selected="true"],
+.stRadio > label:has(input:checked) { /* Using :has for checked radio label */
+  background: var(--primary-color) !important;
+  color: white !important;
+  font-weight: var(--font-weight-bold) !important;
+  border-color: var(--primary-dark) !important;
+  box-shadow: 0 -2px 8px var(--shadow-medium);
+  transform: translateY(-2px);
+  border-bottom: none !important; /* Ensure no default border-bottom */
+}
+
+/* Active State underline */
+button[role="tab"][aria-selected="true"]::after,
+.stRadio > label:has(input:checked)::after {
+  background: var(--primary-dark) !important; /* Darker underline for active */
+  transform: scaleX(1) !important;
+}
+
+/* Hide Streamlit's default radio button circle */
+div.stRadio input[type="radio"] {
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  display: none !important;
+}
+
+/* Specific styling for .browser-tabs (from browser_tabs.css, adapted to variables) */
+.browser-tabs .stRadio > div {
+background-color: #f0f0f0; /* Keeping original value as it's a specific container */
+border-radius: var(--border-radius-md);
+padding: 5px;
+box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+display: flex;
+flex-wrap: wrap;
+margin-bottom: 20px;
+}
+
+.browser-tabs .stRadio > div > label {
+border-radius: 5px !important; /* Specific smaller radius */
+margin: 2px 3px !important;
+padding: 8px 16px !important;
+background-color: #f8f9fa !important;
+transition: all 0.2s ease !important;
+border-bottom: 2px solid transparent !important;
+font-weight: var(--font-weight-medium) !important;
+}
+
+.browser-tabs .stRadio > div > label:hover {
+background-color: #e8f5e9 !important;
+border-bottom: 2px solid var(--highlight-color) !important;
+}
+
+.browser-tabs .stRadio > div > label[data-baseweb="radio"][aria-checked="true"] {
+background-color: var(--primary-color) !important;
+color: white !important;
+border-bottom: 2px solid var(--primary-dark) !important; /* Changed from dark-neutral */
+transform: translateY(-2px);
+box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Level 1 Tabs (e.g., "Dashboard Agricultor", "Análisis Profesional") */
+div[role="tablist"]:nth-of-type(1) {
+  gap: 6px;
+  background: linear-gradient(to bottom, var(--background-primary), var(--accent-color));
+  border-radius: var(--border-radius-lg) var(--border-radius-lg) 0 0;
+  padding: var(--spacing-sm) var(--spacing-sm) 0;
+  border-bottom: 4px solid var(--primary-dark);
+  box-shadow: 0 -2px 12px var(--shadow-light);
+}
+
+div[role="tablist"]:nth-of-type(1) button[role="tab"] {
+  height: 50px;
+  padding: var(--spacing-sm) var(--spacing-xl);
+  font-size: var(--font-size-lg);
+  border-radius: var(--border-radius-md) var(--border-radius-md) 0 0;
+  border-bottom: 4px solid transparent; /* Larger bottom border for level 1 hover/active */
+}
+
+div[role="tablist"]:nth-of-type(1) button[role="tab"]:hover {
+  background: linear-gradient(to bottom, #ffffff, #e8f0e8);
+  transform: translateY(-3px);
+  box-shadow: 0 -2px 8px var(--shadow-medium);
+}
+
+div[role="tablist"]:nth-of-type(1) button[role="tab"][aria-selected="true"] {
+  background: linear-gradient(135deg, var(--primary-light), var(--primary-color));
+  color: white;
+  border: none;
+  box-shadow: 0 -3px 15px var(--shadow-medium);
+  transform: translateY(-2px);
+  border-bottom: 4px solid var(--primary-color);
+}
+
+/* Level 2 Tabs (e.g., "Precios Actuales", "Mi Cosecha Vale") */
+div[role="tablist"]:not(:nth-of-type(1)):not(.tertiary-tabs) {
+  gap: 3px;
+  background: linear-gradient(to bottom, var(--background-secondary), var(--accent-color));
+  border-radius: var(--border-radius-md) var(--border-radius-md) 0 0;
+  padding: var(--spacing-xs) var(--spacing-xs) 0;
+  border-bottom: 3px solid var(--primary-light);
+  box-shadow: 0 -1px 8px var(--shadow-light);
+  margin-top: var(--spacing-lg);
+}
+
+div[role="tablist"]:not(:nth-of-type(1)):not(.tertiary-tabs) button[role="tab"] {
+  height: 48px;
+  background-color: var(--background-secondary);
+  color: var(--text-light);
+  border-radius: var(--border-radius-sm) var(--border-radius-sm) 0 0;
+  padding: var(--spacing-xs) var(--spacing-lg);
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-base);
+  transition: all var(--transition-fast);
+  border: 1px solid var(--border-color-light);
+  border-bottom: none;
+}
+
+div[role="tablist"]:not(:nth-of-type(1)):not(.tertiary-tabs) button[role="tab"]:hover {
+  background-color: #e8f0e8;
+  transform: translateY(-2px);
+  box-shadow: 0 -1px 5px var(--shadow-medium);
+}
+
+div[role="tablist"]:not(:nth-of-type(1)):not(.tertiary-tabs) button[role="tab"][aria-selected="true"] {
+  background: var(--primary-color);
+  color: white;
+  box-shadow: 0 -2px 10px var(--shadow-medium);
+  border: none;
+  transform: translateY(-1px);
+  border-bottom: 3px solid var(--primary-dark);
+}
+
+/* Level 3 Tabs (e.g., "Estadísticas Básicas", "Distribución") */
+.tertiary-tabs {
+  gap: 2px;
+  background-color: var(--background-card);
+  border-radius: var(--border-radius-sm) var(--border-radius-sm) 0 0;
+  padding: var(--spacing-xs) var(--spacing-xs) 0;
+  border-bottom: 2px solid var(--primary-light);
+  box-shadow: 0 -1px 5px var(--shadow-light);
+  margin-top: var(--spacing-md);
+}
+
+.tertiary-tabs button[role="tab"] {
+  height: 38px;
+  background-color: var(--background-secondary);
+  color: var(--text-light);
+  border-radius: var(--border-radius-xs) var(--border-radius-xs) 0 0;
+  padding: 0.35rem var(--spacing-md);
+  font-weight: var(--font-weight-regular);
+  font-size: var(--font-size-sm);
+  transition: all var(--transition-fast);
+  border: 1px solid var(--border-color-light);
+  border-bottom: none;
+}
+
+.tertiary-tabs button[role="tab"]:hover {
+  background-color: #edf0ed;
+  transform: translateY(-1px);
+  box-shadow: 0 -1px 3px var(--shadow-medium);
+}
+
+.tertiary-tabs button[role="tab"][aria-selected="true"] {
+  background-color: var(--primary-light);
+  color: white;
+  box-shadow: 0 -1px 6px var(--shadow-medium);
+  border: none;
+  border-bottom: 2px solid var(--primary-dark);
+}
+
+/* ST Tabs Styling - general Streamlit tabs (from responsive.css) */
+.stTabs [data-baseweb="tab-list"] {
+background-color: #f0f0f0;
+border-radius: var(--border-radius-md);
+padding: 5px;
+box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+display: flex;
+flex-wrap: wrap;
+}
+
+.stTabs [data-baseweb="tab"] {
+border-radius: var(--border-radius-sm);
+margin: 2px 3px;
+padding: var(--spacing-sm) var(--spacing-md);
+background-color: #f8f9fa;
+transition: all 0.2s ease;
+border-bottom: 2px solid transparent;
+font-weight: var(--font-weight-medium);
+}
+
+.stTabs [data-baseweb="tab"]:hover {
+background-color: #e8f5e9;
+border-bottom: 2px solid var(--highlight-color);
+}
+
+.stTabs [aria-selected="true"] {
+background-color: var(--primary-color) !important;
+color: white !important;
+border-bottom: 2px solid var(--primary-dark) !important; /* Changed from dark-neutral */
+transform: translateY(-2px);
+box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* ST Radio Buttons - general styling (from responsive.css) */
+.stRadio > div {
+gap: var(--spacing-xs) !important;
+}
+
+.stRadio > div > label {
+border-radius: var(--border-radius-sm) !important;
+padding: var(--spacing-sm) var(--spacing-md) !important;
+background-color: #f8f9fa !important;
+border: 1px solid #e0e0e0 !important;
+transition: all 0.2s ease !important;
+}
+
+.stRadio > div > label:hover {
+background-color: #e8f5e9 !important;
+border-color: var(--highlight-color) !important;
+}
+
+.stRadio > div > label[data-baseweb="radio"] > div:first-child {
+background-color: white !important;
+}
+
+.stRadio > div > label[data-baseweb="radio"][aria-checked="true"] {
+background-color: #e8f5e9 !important; /* Keeping light background here for consistency with original styles.css intent */
+border-color: var(--primary-color) !important;
+color: var(--primary-color) !important;
+}
+
+.stRadio > div > label[data-baseweb="radio"][aria-checked="true"] > div:first-child div:last-child {
+background-color: var(--primary-color) !important;
+}
+
+
+/* Buttons */
+.stButton > button {
+  background-color: var(--secondary-color);
+  color: white;
+  border: none;
+  padding: var(--spacing-sm) var(--spacing-lg);
+  border-radius: var(--border-radius-sm);
+  font-weight: var(--font-weight-medium);
+  letter-spacing: 0.04em;
+  transition: all var(--transition-base);
+  box-shadow: 0 4px 10px var(--shadow-light);
+  text-transform: uppercase;
+  font-size: var(--font-size-sm);
+  margin-top: var(--spacing-sm);
+}
+.stButton > button:hover {
+  background-color: #48804c; /* Darker secondary color */
+  transform: translateY(-3px);
+  box-shadow: 0 6px 15px var(--shadow-medium);
+  cursor: pointer;
+}
+.stButton > button:active {
+  transform: translateY(1px);
+  box-shadow: 0 2px 8px var(--shadow-light);
+}
+
+/* Sidebar Button Specific (from styles.css) */
+[data-testid="stSidebar"] .stButton > button {
+  background-color: var(--secondary-color);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: none;
+}
+[data-testid="stSidebar"] .stButton > button:hover {
+  background-color: #48804c;
+  transform: translateY(-1px);
+}
+
+/* Sidebar Toggle (from browser_tabs.css, adapted) */
+.sidebar-toggle {
+  position: fixed;
+  top: 10px;
+  left: 10px;
+  z-index: 9999;
+  background-color: var(--primary-color);
+  color: white;
+  border-radius: 5px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+/* Button Variants (from responsive.css) */
+.secondary-button > button {
+background-color: white;
+color: var(--primary-color);
+border: 1px solid var(--primary-color);
+}
+
+.secondary-button > button:hover {
+background-color: #f0f7f0;
+}
+
+/* Adjusted Danger Button */
+.danger-button > button {
+background-color: #b0522d; /* Marrón/naranja oscuro para "danger" */
+color: white;
+}
+
+.danger-button > button:hover {
+background-color: #5eae65; /* Un poco más oscuro en hover */
+}
+
+/* Selectors (from responsive.css) */
+.stSelectbox > div[data-baseweb="select"] > div:first-child {
+border-radius: var(--border-radius-md);
+background-color: white;
+border: 1px solid #ddd;
+}
+
+.stSelectbox > div[data-baseweb="select"] > div:first-child:focus-within {
+border-color: var(--primary-color);
+box-shadow: 0 0 0 2px rgba(90, 143, 123, 0.2);
+}
+
+/* Sliders (from responsive.css) */
+.stSlider > div > div > div {
+background-color: var(--primary-color);
+}
+
+/* Alerts / Info Boxes */
+.info-box { /* From responsive.css */
+background-color: #e8f5e9;
+border-left: 5px solid var(--primary-color);
+padding: var(--spacing-md);
+border-radius: var(--border-radius-md);
+margin-bottom: var(--spacing-md);
+}
+
+.warning-box { /* From responsive.css */
+background-color: #fff3e0;
+border-left: 5px solid var(--warning-color);
+padding: var(--spacing-md);
+border-radius: var(--border-radius-md);
+margin-bottom: var(--spacing-md);
+}
+
+.error-box { /* From responsive.css */
+background-color: #ffebee;
+border-left: 5px solid var(--error-color);
+padding: var(--spacing-md);
+border-radius: var(--border-radius-md);
+margin-bottom: var(--spacing-md);
+}
+
+.stAlert { /* From styles.css */
+  border-radius: var(--border-radius-md);
+  box-shadow: 0 4px 12px var(--shadow-light);
+  border: none;
+  padding: var(--spacing-lg);
+  font-size: var(--font-size-base);
+  line-height: 1.6;
+}
+.stAlert[data-severity="warning"] {
+  border-left: 6px solid var(--warning-color);
+  background-color: #fffaed;
+  color: var(--warning-color);
+}
+.stAlert[data-severity="info"] {
+  border-left: 6px solid var(--info-color);
+  background-color: #f0f8ff;
+  color: var(--info-color);
+}
+.stAlert[data-severity="success"] {
+  border-left: 6px solid var(--success-color);
+  background-color: #d4edda;
+  color: var(--success-color);
+}
+.stAlert[data-severity="error"] {
+  border-left: 6px solid var(--error-color);
+  background-color: #f8d7da;
+  color: var(--error-color);
+}
+
+/* DataFrames */
+.dataframe-container { /* From responsive.css (wrapper) */
+border-radius: var(--border-radius-md);
+overflow: hidden;
+box-shadow: var(--shadow-sm);
+}
+
+.styled-dataframe th { /* From responsive.css */
+background-color: var(--primary-color);
+color: white;
+font-weight: var(--font-weight-medium);
+padding: var(--spacing-sm) var(--spacing-md);
+}
+
+.styled-dataframe tr:nth-child(even) { /* From responsive.css */
+background-color: #f8f9fa;
+}
+
+.styled-dataframe tr:hover { /* From responsive.css */
+background-color: #e8f5e9;
+}
+
+.stDataFrame { /* From styles.css (actual dataframe) */
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--border-radius-md);
+  box-shadow: 0 4px 12px var(--shadow-light);
+  overflow: hidden;
+  transition: all var(--transition-base);
+}
+.stDataFrame:hover {
+  box-shadow: 0 6px 15px var(--shadow-medium);
+}
+.stDataFrame table {
+  border-collapse: collapse;
+  width: 100%;
+}
+.stDataFrame table thead tr th {
+  background-color: var(--primary-color);
+  color: white;
+  padding: var(--spacing-sm) var(--spacing-md);
+  font-weight: var(--font-weight-semibold);
+  text-align: left;
+  font-size: var(--font-size-sm);
+  border-bottom: 2px solid var(--primary-dark);
+}
+.stDataFrame table tbody tr:nth-child(even) {
+  background-color: var(--accent-color);
+}
+.stDataFrame table tbody tr:hover {
+  background-color: #e9f0ea;
+}
+.stDataFrame table tbody tr td {
+  padding: var(--spacing-sm) var(--spacing-md);
+  border-bottom: 1px solid var(--border-color-light);
+  color: var(--text-color);
+}
+
+/* Indicators (from styles.css) */
+.indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--spacing-sm) var(--spacing-md);
+  margin: var(--spacing-xs);
+  border-radius: var(--border-radius-lg);
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-sm);
+  transition: all var(--transition-base);
+  animation: fadeIn var(--transition-base);
+  border: 1px solid transparent;
+}
+.indicator-success { background-color: #d4edda; color: var(--success-color); border-color: #c3e6cb; }
+.indicator-warning { background-color: #fff3cd; color: var(--warning-color); border-color: #ffeeba; }
+.indicator-info { background-color: #d1ecf1; color: var(--info-color); border-color: #bee5eb; }
+.indicator:hover {
+  transform: scale(1.05);
+  box-shadow: 0 2px 8px var(--shadow-light);
+}
+
+/* Search Widget (from responsive.css) */
+.search-container {
+display: flex;
+align-items: center;
+gap: var(--spacing-sm);
+background-color: white;
+border-radius: var(--border-radius-md);
+padding: var(--spacing-xs) var(--spacing-sm);
+border: 1px solid #ddd;
+margin-bottom: var(--spacing-md);
+}
+
+.search-container input {
+flex: 1;
+border: none;
+outline: none;
+padding: var(--spacing-sm);
+font-size: 1rem;
+}
+
+.search-container button {
+background-color: var(--primary-color);
+color: white;
+border: none;
+border-radius: var(--border-radius-sm);
+padding: var(--spacing-xs) var(--spacing-md);
+cursor: pointer;
+}
+
+/* Sidebar Styling - ADJUSTED FOR LIGHTER BACKGROUND */
+[data-testid="stSidebar"] { /* From styles.css */
+  background: linear-gradient(to bottom, #e8f5e9, #c8e6c9); /* More prominent light green */
+  padding: var(--spacing-lg);
+  border-radius: 0 var(--border-radius-lg) var(--border-radius-lg) 0;
+}
+
+/* Hide scrollbar of sidebar (from styles.css) */
+[data-testid="stSidebar"] [data-testid="stSidebarContent"] {
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+[data-testid="stSidebar"] [data-testid="stSidebarContent"]::-webkit-scrollbar {
+  display: none;
+}
+
+/* Adjust text color for all sidebar elements (from styles.css) */
+[data-testid="stSidebar"] h1,
+[data-testid="stSidebar"] h2,
+[data-testid="stSidebar"] h3,
+[data-testid="stSidebar"] label,
+[data-testid="stSidebar"] .st-bq,
+[data-testid="stSidebar"] .stMarkdown p,
+[data-testid="stSidebar"] .stButton > button,
+[data-testid="stSidebar"] span {
+  color: var(--text-color) !important; /* Using text-color for consistency */
+}
+
+/* Sidebar Selectbox & MultiSelect Styling (from styles.css) */
+[data-testid="stSidebar"] .st-bd {
+  color: var(--text-color) !important;
+  font-weight: var(--font-weight-medium);
+}
+[data-testid="stSidebar"] [data-baseweb="select"] [data-testid="stMarkdown"] p {
+  color: var(--text-color) !important;
+  font-weight: var(--font-weight-semibold) !important;
+}
+[data-testid="stSidebar"] .stSelectbox label,
+[data-testid="stSidebar"] .stMultiSelect label,
+[data-testid="stSidebar"] .stCheckbox label,
+[data-testid="stSidebar"] select,
+[data-testid="stSidebar"] .stDateInput label {
+  color: var(--text-color) !important;
+}
+
+/* Popover / Dropdown Menu Styling (from styles.css) */
+[data-baseweb="popover"] ul li:hover {
+  background-color: var(--primary-light) !important;
+  color: white !important;
+}
+[data-baseweb="popover"] ul li[aria-selected="true"] {
+  background-color: var(--primary-color) !important;
+  color: white !important;
+  font-weight: var(--font-weight-bold) !important;
+}
+
+/* General Streamlit Text & Elements */
+.stMarkdown,
+.stText,
+.stDataFrame p,
+.stDataFrame span,
+p,
+label,
+span {
+  color: var(--text-color); /* Using text-color for consistency */
+}
+
+.element-container,
+.stTextInput > label,
+.stSelectbox > label,
+.stMultiSelect > label,
+[data-testid="stMarkdownContainer"] p,
+.stPlotlyChart p,
+.stPlotlyChart span {
+  color: var(--text-color);
+}
+
+/* Streamlit Component Spacing */
+.element-container {
+  padding: var(--spacing-xs) 0;
+  overflow: visible !important;
+}
+[data-testid="stSelectbox"],
+[data-testid="stMultiselect"] {
+  margin-bottom: var(--spacing-md);
+}
+
+/* Selectbox/Multiselect visible container (from styles.css) */
+[data-testid="stSelectbox"] > div:first-child,
+[data-testid="stMultiselect"] > div:first-child {
+  background-color: var(--background-card);
+  border: 1px solid var(--border-color-light);
+  border-radius: var(--border-radius-sm);
+  transition: all var(--transition-base);
+  box-shadow: inset 1px 1px 3px var(--shadow-light);
+  min-height: 40px;
+  padding: 0.5rem;
+}
+[data-testid="stSelectbox"] > div:first-child:hover,
+[data-testid="stMultiselect"] > div:first-child:hover {
+  border-color: var(--primary-light);
+  box-shadow: inset 1px 1px 5px var(--shadow-light), 0 0 0 2px rgba(90, 143, 123, 0.2);
+}
+
+/* Text inside selectbox/multiselect (from styles.css) */
+/* Text in selectbox/multiselect in LIGHT MODE */
+[data-testid="stSelectbox"] span,
+[data-testid="stMultiselect"] span {
+  color: var(--text-color);
+  line-height: 1.5;
+  padding: 0.375rem 0.75rem;
+}
+
+
+.stRadio > div { margin-bottom: var(--spacing-sm); }
+.stSlider { margin-top: var(--spacing-md); margin-bottom: var(--spacing-md); }
+
+/* Chart Containers (from responsive.css) */
+.chart-container {
+border-radius: var(--border-radius-md);
+overflow: hidden;
+box-shadow: var(--shadow-sm);
+background-color: white;
+padding: var(--spacing-sm);
+margin-bottom: var(--spacing-md);
+}
+
+/* Responsive Design - Consolidated and prioritized responsive.css */
+@media screen and (max-width: 768px) {
+/* Adjustments for mobile */
+h1 {
+    font-size: 1.6rem;
+}
+
+h2 {
+    font-size: 1.3rem;
+}
+
+h3 {
+    font-size: 1.1rem;
+}
+
+/* General Radio Button Styling (applies to browser-tabs and custom-tabs too) */
+.stRadio > div {
+    flex-direction: column !important;
+}
+
+.stRadio > div > label {
+    width: 100% !important;
+    margin-bottom: var(--spacing-xs) !important;
+    padding: var(--spacing-sm) !important;
+}
+
+/* Improve table readability on mobile */
+.dataframe {
+    font-size: 0.9rem;
+}
+
+/* Adjust spacing on mobile */
+.stColumns > div {
+    padding: var(--spacing-xs) !important;
+}
+
+/* Fix responsive charts */
+.stPlotlyChart, .stChart {
+    height: 300px !important;
+}
+
+/* Improve metric readability */
+.stMetric {
+    padding: var(--spacing-sm) !important;
+}
+
+.stMetric label {
+    font-size: 0.9rem !important;
+}
+
+.stMetric div {
+    font-size: 1.3rem !important;
+}
+
+/* Adjust controls */
+.stSlider, .stSelectbox, .stTextInput {
+    padding: 0 var(--spacing-xs) !important;
+}
+
+/* Sidebar adjustments on mobile */
+[data-testid="stSidebar"] {
+    width: 80% !important;
+    min-width: 0 !important;
+    max-width: 300px !important;
+    position: fixed !important;
+    height: 100% !important;
+    z-index: 1000 !important;
+    transition: transform 0.3s ease !important;
+    box-shadow: 2px 0 5px rgba(0,0,0,0.1) !important;
+}
+
+/* When sidebar is collapsed */
+[data-testid="stSidebar"][aria-expanded="false"] {
+    transform: translateX(-100%) !important;
+}
+
+/* Create space for main content */
+.main .block-container {
+    padding-left: 10px !important;
+    padding-right: 10px !important;
+}
+
+/* Adjust button size on mobile */
+.stButton > button {
+    width: 100%;
+    padding: var(--spacing-md) !important;
+}
+}
+
+/* Accessibility Improvements (from responsive.css) */
+.visually-hidden {
+position: absolute;
+width: 1px;
+height: 1px;
+padding: 0;
+margin: -1px;
+overflow: hidden;
+clip: rect(0, 0, 0, 0);
+white-space: nowrap;
+border-width: 0;
+}

@@ -162,6 +162,7 @@ cython_debug/
 *.sqlite
 *.pkl
 *.joblib
+*.parquet
 
 # Jupyter
 .ipynb_checkpoints

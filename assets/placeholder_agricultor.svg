@@ -1,0 +1,17 @@
+
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
+  <rect width="100%" height="100%" fill="#f5f8f5"/>
+  <!-- Field background -->
+  <path d="M0,200 C100,180 300,220 400,200 L400,300 L0,300 Z" fill="#2E7D32" opacity="0.1"/>
+  <!-- Farmer silhouette -->
+  <path d="M180,140 C180,120 220,120 220,140 L220,180 L180,180 Z" fill="#2E7D32"/>
+  <circle cx="200" cy="120" r="20" fill="#2E7D32"/>
+  <!-- Plants -->
+  <path d="M150,200 C150,160 180,160 180,200 M220,200 C220,160 250,160 250,200" 
+        stroke="#2E7D32" stroke-width="2" fill="none"/>
+  <!-- Simple charts -->
+  <rect x="280" y="120" width="20" height="60" fill="#2E7D32" opacity="0.6"/>
+  <rect x="310" y="140" width="20" height="40" fill="#2E7D32" opacity="0.8"/>
+  <rect x="340" y="100" width="20" height="80" fill="#2E7D32"/>
+  <text x="200" y="250" font-family="Arial" font-size="18" fill="#2E7D32" text-anchor="middle">Dashboard Agricultor</text>
+</svg>

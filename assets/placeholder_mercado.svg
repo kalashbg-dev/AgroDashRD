@@ -1,0 +1,21 @@
+
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="300" viewBox="0 0 400 300">
+  <rect width="100%" height="100%" fill="#f8f9fc"/>
+  <!-- Analysis grid background -->
+  <path d="M50,50 L350,50 M50,150 L350,150 M50,250 L350,250" 
+        stroke="#ddd" stroke-width="1" stroke-dasharray="5,5"/>
+  <!-- Market trend line -->
+  <path d="M50,200 C150,180 250,120 350,100" 
+        stroke="#2E7D32" stroke-width="3" fill="none"/>
+  <!-- Data points -->
+  <circle cx="150" cy="180" r="4" fill="#2E7D32"/>
+  <circle cx="250" cy="120" r="4" fill="#2E7D32"/>
+  <!-- Analysis icons -->
+  <rect x="60" y="70" width="30" height="30" rx="5" fill="#2E7D32" opacity="0.2"/>
+  <rect x="100" y="70" width="30" height="30" rx="5" fill="#2E7D32" opacity="0.4"/>
+  <rect x="140" y="70" width="30" height="30" rx="5" fill="#2E7D32" opacity="0.6"/>
+  <!-- Professional figure -->
+  <path d="M300,180 C300,160 340,160 340,180 L340,220 L300,220 Z" fill="#1B5E20"/>
+  <circle cx="320" cy="160" r="20" fill="#1B5E20"/>
+  <text x="200" y="270" font-family="Arial" font-size="18" fill="#1B5E20" text-anchor="middle">Análisis de Mercado</text>
+</svg>
