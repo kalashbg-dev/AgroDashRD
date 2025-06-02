@@ -12,7 +12,6 @@ openpyxl>=3.1.2  # Para manejo de archivos Excel
 psutil>=5.9.0
 pyyaml>=6.0.1
 holidays>=0.73
-streamlit-cache-data>=0.1.0
 # gunicorn solo si el despliegue lo requiere
 # gunicorn>=20.1.0
 
