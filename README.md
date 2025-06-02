@@ -1,5 +1,7 @@
 # AgroDashRD - Dominican Agricultural Sector Analysis Dashboard 🌱
 
+![Agrodash](Screenshots/Agrodash-main.png)
+
 ## What is AgroDashRD?
 
 AgroDashRD is an interactive tool for visualizing and analyzing agricultural sector data in the Dominican Republic. It's designed to help both farmers and industry professionals make better data-driven decisions.
