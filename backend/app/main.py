@@ -19,12 +19,16 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# Configurar CORS (Permitir Flutter Web y Dev)
+# Configurar CORS (Permitir Flutter Web, Dev y Emulador Android)
+# En producción, restringir a dominios específicos
 origins = [
     "http://localhost",
     "http://localhost:8000",
     "http://localhost:3000",
-    "*"  # Permitir todo en desarrollo, restringir en producción
+    "http://localhost:5000", # Flutter Web default
+    "http://127.0.0.1:8000",
+    "http://10.0.2.2:8000", # Android Emulator
+    "*"  # Desarrollo local sin fricción
 ]
 
 app.add_middleware(
