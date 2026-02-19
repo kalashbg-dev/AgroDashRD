@@ -69,6 +69,8 @@ class PriceCreate(BaseModel):
 class PriceResponse(PriceCreate):
     id: int
     reporter_id: int
+    product: ProductResponse
+    market: MarketResponse
 
     class Config:
         orm_mode = True
