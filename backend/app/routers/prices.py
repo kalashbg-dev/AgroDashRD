@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from typing import List
+from sqlalchemy.orm import Session, joinedload
+from typing import List, Optional
 from datetime import datetime
 from backend.app.database import get_db
 from backend.app.models.core import Price, Product, Market
@@ -14,12 +14,15 @@ router = APIRouter(prefix="/prices", tags=["Prices"])
 def get_prices(
     skip: int = 0,
     limit: int = 100,
-    product_id: int = None,
-    market_id: int = None,
-    date_from: datetime = None,
+    product_id: Optional[int] = None,
+    market_id: Optional[int] = None,
+    date_from: Optional[datetime] = None,
     db: Session = Depends(get_db)
 ):
-    query = db.query(Price)
+    query = db.query(Price).options(
+        joinedload(Price.product),
+        joinedload(Price.market)
+    )
 
     if product_id:
         query = query.filter(Price.product_id == product_id)
