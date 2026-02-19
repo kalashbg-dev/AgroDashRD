@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
 from backend.app.database import get_db
-from backend.app.models.core import Price
+from backend.app.models.core import Price, Product, Market
 from backend.app.schemas import PriceCreate, PriceResponse
 from backend.app.models.user import User, UserRole
 from backend.app.utils.security import get_current_active_user
@@ -43,6 +43,16 @@ def create_price(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not enough permissions. Only Technicians can report prices."
         )
+
+    # Validar que Producto exista
+    product = db.query(Product).filter(Product.id == price.product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail=f"Product with id {price.product_id} not found")
+
+    # Validar que Mercado exista
+    market = db.query(Market).filter(Market.id == price.market_id).first()
+    if not market:
+        raise HTTPException(status_code=404, detail=f"Market with id {price.market_id} not found")
 
     db_price = Price(
         product_id=price.product_id,
