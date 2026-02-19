@@ -32,19 +32,21 @@ En `backend/requirements.txt`, la librería `prophet` está comentada por defect
 ## 2. Frontend Móvil (Flutter)
 
 ### Conexión con API (`lib/services/api_service.dart`)
-El archivo `api_service.dart` tiene configurada la URL base para el emulador de Android por defecto (`10.0.2.2`).
+El archivo `api_service.dart` tiene configurada la URL base. Ajustar según el entorno:
 
 *   **Para Emulador Android:** Mantener `http://10.0.2.2:8000`.
 *   **Para Simulador iOS:** Cambiar a `http://localhost:8000`.
 *   **Para Dispositivo Físico (mismo WiFi):** Cambiar a la IP local de tu PC (ej: `http://192.168.1.50:8000`).
 *   **Para Producción:** Cambiar a la URL del dominio real (ej: `https://api.agrodashrd.com`).
 
-### Descomentar Lógica Real
-En las pantallas (`screens/`), hay bloques de código comentados con `// TODO: Descomentar...` que conectan la UI con el backend real.
-*   **LoginScreen (`login_screen.dart`):** Descomentar la llamada a `ApiService.login`.
-*   **RegisterScreen (`register_screen.dart`):** Descomentar la llamada a `ApiService.register`.
-*   **HomeScreen (`home_screen.dart`):** Descomentar la carga de precios en `_loadPrices`.
-*   **ReportPriceScreen (`report_price_screen.dart`):** Descomentar la carga de productos/mercados y el envío del reporte.
+### Funcionalidad Implementada
+Se ha restaurado el esqueleto de la aplicación con las siguientes pantallas:
+*   **LoginScreen (`login_screen.dart`):** Autenticación de usuarios.
+*   **RegisterScreen (`register_screen.dart`):** Registro de nuevos usuarios.
+*   **HomeScreen (`home_screen.dart`):** Visualización de precios y navegación.
+*   **ReportPriceScreen (`report_price_screen.dart`):** Formulario para reportar precios.
+
+**Nota:** La lógica de conexión con el backend está implementada en `api_service.dart` pero puede requerir ajustes según los endpoints finales del backend.
 
 ---
 

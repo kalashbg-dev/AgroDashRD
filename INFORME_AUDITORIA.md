@@ -41,3 +41,24 @@ El requerimiento de "compilar para móvil como app" **no es viable con el stack 
 Para lograr la meta de una aplicación definitiva, robusta, multi-usuario (Agricultor, Técnico, Admin, SuperAdmin) y móvil, **es imperativa una migración de arquitectura**.
 
 El código actual sirve como una excelente **prueba de concepto lógica y validación de visualizaciones**, pero no puede ser la base del producto final. Se debe desacoplar el "Cerebro" (Python/Datos) del "Cuerpo" (App Móvil/Web).
+
+---
+
+## 5. Actualización 2026: Auditoría Post-Migración
+
+### 5.1 Estado Actual
+Se ha completado una reestructuración significativa del proyecto para abordar las limitaciones identificadas anteriormente.
+*   **Arquitectura:** Separación exitosa entre Backend (API REST) y Frontend Móvil (Flutter).
+*   **Backend (`backend/`):** Implementado con FastAPI. Soporta autenticación JWT, gestión de usuarios, productos, mercados y precios. Base de datos PostgreSQL/SQLite integrada.
+*   **Mobile App (`mobile_app/`):** Se ha creado un esqueleto funcional en Flutter que incluye pantallas de Login, Registro, Home y Reporte de Precios.
+*   **Legacy (`legacy/`):** El código original en Streamlit se ha movido a una carpeta dedicada para referencia histórica.
+
+### 5.2 Anomalías Corregidas
+1.  **Código Faltante en Mobile App:** Se detectó que la carpeta `mobile_app/` estaba vacía (solo contenía `pubspec.yaml`). Se ha restaurado la estructura de archivos (`lib/`, `screens/`, `services/`, `models/`) para permitir la compilación y desarrollo.
+2.  **Documentación Desactualizada:** El archivo `README.md` raíz describía la arquitectura antigua. Se ha actualizado para reflejar la nueva estructura y guiar al desarrollador en el uso del Backend y la Mobile App.
+3.  **Dependencias:** Se verificaron las dependencias del backend (`requirements.txt`) y se confirmó que la librería `prophet` sigue siendo opcional y está manejada correctamente en el código (`try...except`).
+
+### 5.3 Próximos Pasos Recomendados
+1.  **Implementación Lógica Móvil:** Completar la integración de los endpoints reales en `api_service.dart`.
+2.  **Pruebas End-to-End:** Verificar el flujo completo desde el registro de usuario en la app móvil hasta la persistencia en base de datos.
+3.  **Despliegue:** Configurar pipelines de CI/CD para automatizar el despliegue del backend y la compilación de la app móvil.
