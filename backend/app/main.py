@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from backend.app.routers import auth, markets, products, prices, predictions
+from backend.app.routers import auth, markets, products, prices, predictions, dashboard
 from backend.app.database import engine, Base
 import logging
 
@@ -41,6 +41,7 @@ app.include_router(markets.router)
 app.include_router(products.router)
 app.include_router(prices.router)
 app.include_router(predictions.router)
+app.include_router(dashboard.router)
 
 @app.get("/", tags=["Health"])
 async def root():
