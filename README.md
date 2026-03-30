@@ -4,107 +4,97 @@
 
 ## What is AgroDashRD?
 
-AgroDashRD is an interactive tool for visualizing and analyzing agricultural sector data in the Dominican Republic. It's designed to help both farmers and industry professionals make better data-driven decisions.
+AgroDashRD is a comprehensive platform for visualizing and analyzing agricultural sector data in the Dominican Republic. Originally a monolithic dashboard, it has evolved into a modern architecture with a dedicated **Backend API** and a **Mobile App**.
 
-## Main Features
+## Architecture
+
+The project is divided into two main components:
+
+1.  **Backend (`backend/`)**: A robust REST API built with **FastAPI** (Python), using **PostgreSQL** for data storage and **SQLAlchemy** for ORM. It handles authentication, data management, and ML predictions.
+2.  **Mobile App (`mobile_app/`)**: A cross-platform mobile application built with **Flutter**, designed for farmers and professionals to access data on the go.
+
+> **Note:** The original Dash/Streamlit application is preserved in the `legacy/` directory for reference.
+
+## Features
 
 ### For Farmers 👨‍🌾
+- **Current Prices**: Check real-time market prices.
+- **Harvest Calculator**: Estimate harvest value.
+- **Best Markets**: Find the most profitable markets.
 
-- **Current Prices**: Check the latest prices of agricultural products in different markets.
-- **Harvest Calculator**: Estimate your harvest value based on current market prices.
-- **Best Markets**: Discover where you can get better prices for your products.
-- **Planting Calendar**: Identify the best times to sell each product.
+### For Professionals 📊
+- **Value Chain Analysis**: Track product flow.
+- **Price Forecasts**: ML-powered price predictions.
+- **Statistical Analysis**: In-depth metrics.
 
-### For Professionals and Analysts 📊
+## Getting Started
 
-- **Value Chain Analysis**: Study product and price flow throughout the chain.
-- **Market Comparison**: Analyze price differences between markets.
-- **Price Forecasts**: View trends and future price predictions.
-- **Statistical Analysis**: Access detailed metrics and in-depth data analysis.
+### Prerequisites
+- Python 3.12+
+- Flutter SDK
+- Docker & Docker Compose (Recommended)
 
-## Project Structure
+### Quick Start (Development)
 
-```txt
-AgrodashRD(v1.9.2)/
-├── app.py                  # Main script to run the app
-├── assets/                 # Static files (images, icons, styles)
-├── data/                   # Data files and cache
-├── src/                    # Main source code
-│   ├── dashboard_agricultor.py
-│   ├── dashboard_profesional.py
-│   ├── ...
-│   └── utils/
-├── requirements.txt        # Python dependencies
-├── pyproject.toml         # Python project configuration
-├── Dockerfile             # Docker container configuration
-├── Procfile              # Deployment configuration (Heroku/Render)
-├── render.yaml           # Render deployment configuration
-├── setup.sh             # Initialization script
-├── deployment_guide.md   # Detailed deployment guide
-├── Next steps.md        # Roadmap and future tasks
-└── README.md            # This file
+The easiest way to start the backend is using the provided script:
+
+```bash
+./start_dev.sh
 ```
 
-## Local Installation and Execution
+This will check for dependencies and launch the backend (using Docker if available, or local Python otherwise).
 
-1. **Clone the repository:**
+### Manual Setup
 
-  ```bash
-  git clone <repository-url>
-  cd AgrodashRD(v1.8.5)
-  ```
+#### Backend
+See [backend/README.md](backend/README.md) for detailed instructions.
 
-2. **Install dependencies:**
+1.  Create a virtual environment and install dependencies:
+    ```bash
+    cd backend
+    python -m venv venv
+    source venv/bin/activate
+    pip install -r requirements.txt
+    ```
+2.  Run the server:
+    ```bash
+    uvicorn backend.app.main:app --reload
+    ```
+    API Docs: http://localhost:8000/docs
 
-  ```bash
-  pip install -r requirements.txt
-  ```
+#### Mobile App
+See `mobile_app/` for the Flutter project.
 
-1. **Run the application:**
+1.  Navigate to the directory:
+    ```bash
+    cd mobile_app
+    ```
+2.  Install dependencies:
+    ```bash
+    flutter pub get
+    ```
+3.  Run the app:
+    ```bash
+    flutter run
+    ```
+    *Note: Ensure the backend is running first.*
 
-  ```bash
-  python app.py
-  ```
+## Documentation
 
-  The application will be available at `http://localhost:8050` or the configured port.
-
-## Deployment
-
-- **Docker:**
-
-  ```bash
-  docker build -t agrodashrd .
-  docker run -p 8050:8050 agrodashrd
-  ```
-
-- **Render/Heroku:**
-  Use the `Procfile` and `render.yaml` files for automatic deployment. Check `deployment_guide.md` for detailed instructions.
+- **[CONFIGURACION_PENDIENTE.md](CONFIGURACION_PENDIENTE.md)**: Detailed configuration guide and pending tasks.
+- **[GUIA_DESPLIEGUE.md](GUIA_DESPLIEGUE.md)**: Deployment instructions.
+- **[INFORME_AUDITORIA.md](INFORME_AUDITORIA.md)**: Audit report.
 
 ## Data
 
-Data files are located in the `data/` folder and are used to feed visualizations and analyses. The system uses cache to speed up processing (`data/cache/`).
-
-## Benefits
-
-- **For Farmers:**
-  - Make better sales decisions
-  - Better plan your plantings
-  - Maximize your profits
-
-- **For Professionals:**
-  - Analyze market trends
-  - Identify improvement opportunities
-  - Make data-driven decisions
-
-## Updates
-
-Data is regularly updated to provide accurate and relevant information about the Dominican agricultural market. Datasets are available [here][datasets].
-
-[datasets]: https://drive.google.com/drive/folders/17yLtW6AJeFK46HgnAIFnPCHRALvCReG_?usp=drive_link
+Data is stored in PostgreSQL (or SQLite for local dev). Initial seed data can be loaded via:
+```bash
+python backend/scripts/seed_data.py
+```
 
 ## Support
 
-For questions or assistance, contact the support team through the corresponding platform.
+For questions, please open an issue or contact the development team.
 
 ---
 Developed with ❤️ for the Dominican agricultural sector.
