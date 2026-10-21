@@ -19,7 +19,7 @@ Assumption: the wholesale CSV belongs to "Mercado Nuevo" (legacy assumption) unt
 
 | ID | Specs | Route | Status | Commit |
 |----|-------|-------|--------|--------|
-| T0 | S1 | inline | done, review pending consent | c721cea |
+| T0 | S1 | inline | done | a1c8010, 4cd34b6, 3632910, follow-up fix |
 | T1 | S2 | inline | pending | |
 | T2 | S3 | inline | pending | |
 | T3 | S4 | inline | pending | |
@@ -34,4 +34,5 @@ Route evidence: phases depend on each other (no independent parallel units), so 
 - L1 (2026-10-21, user): "OK. me gusta tu hallazgo. este proyecto quiero hacerlo en python y llevarlo a una version mobile tipo webapp si aplica, o usa streamlit si sigue siendo buena opcion, no lo compliques. Tienes 7 puntos tocados en este informe auditoria. EMPIEZA A CUMPLIRLOS UNO POR UNO, Resuelve todo lo que sea estructural y d arquitectura que no necesite mi intervencion. Acepto tus sugerencias todas. si tienes skills de ciberseguridad, de diseño, y de lo que dices que falta, usalas. Reformula el plan y te doy el visto bueno. Piensa profundamente"
 - L2 (2026-10-21, user): "me gusta este F0 a F6, se queda algo de lado. Que haremos con esta conclusion: el problema principal hoy no es qué modelo usar sino la calidad de los datos. Hace falta un catálogo de productos con sus variantes de nombre y una tabla de conversión de unidades. Sin eso, cualquier modelo aprende ruido.Es un enunciado que menciona algo que se debe resolver. Dentro de F3 debe estar, si es asi, obvia lo que digo pues ya lo pensaste. PRocede"
 - L4 (T0 evidence): settings tests RED (module missing) then GREEN, 4 passed; fresh clone `uv sync --locked`, `ruff check`, `ruff format --check`, `pytest` all pass; `git check-ignore` confirms `mobile_app/lib/`, `src/`, `tests/fixtures/*.csv` are no longer ignored. Assess: high (CI shell, removed executable script); native review lenses risk + reliability awaiting user consent.
+- L5 (T0 review): F0 split into three commits because the first candidate exceeded the reviewer context budget. a1c8010 approved (risk lens, no findings). 4cd34b6 (generated lockfile and Flutter deletions) unavailable: `lens_context_budget_exceeded` even alone. 3632910 approved (risk + reliability) with warnings, fixed in a follow-up commit: production guard now requires a postgresql scheme (empty, upper-case SQLite, mysql rejected; 12 tests pass), data files ignored repo-wide except `tests/fixtures/**`, CI actions pinned to commit SHAs (checkout v5.1.0, setup-uv v6.8.0). `start_dev.sh` stays until `backend/` is removed in F2.
 - L3: plan approved; data-quality gate added to S4/S5. Engram mirror pending: `mem_current_project` is ambiguous from `~/Downloads` (agrodashrd vs another repo).

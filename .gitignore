@@ -20,9 +20,13 @@ htmlcov/
 !.env.example
 .streamlit/secrets.toml
 
-# Local data and databases (raw datasets come from Google Drive)
-/data/
-/legacy/data/
+# Local data and databases (raw datasets come from Google Drive).
+# Small hand-made test fixtures are the only tracked data files.
+*.csv
+*.xls
+*.xlsx
+*.parquet
+!tests/fixtures/**
 *.db
 *.sqlite
 *.sqlite3
