@@ -15,8 +15,12 @@ class Settings(BaseSettings):
 
     @field_validator("database_url")
     @classmethod
-    def _strip_database_url(cls, value: str) -> str:
-        return value.strip()
+    def _normalize_database_url(cls, value: str) -> str:
+        value = value.strip()
+        # Some hosts inject the short alias, which SQLAlchemy 2 no longer accepts.
+        if value.startswith("postgres://"):
+            value = "postgresql://" + value.removeprefix("postgres://")
+        return value
 
     @model_validator(mode="after")
     def _require_postgresql_in_production(self) -> "Settings":

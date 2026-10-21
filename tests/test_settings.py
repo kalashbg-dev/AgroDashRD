@@ -60,6 +60,13 @@ def test_production_accepts_postgresql_urls(monkeypatch, url):
     assert load().database_url == url.strip()
 
 
+def test_normalizes_short_postgres_scheme(monkeypatch):
+    monkeypatch.setenv("AGRODASH_ENV", "production")
+    monkeypatch.setenv("AGRODASH_DATABASE_URL", "postgres://u:p@db/agrodash")
+
+    assert load().database_url == "postgresql://u:p@db/agrodash"
+
+
 def test_reads_values_from_env_file(tmp_path):
     env_file = tmp_path / ".env"
     env_file.write_text("AGRODASH_DATABASE_URL=sqlite:///from-file.db\n")
