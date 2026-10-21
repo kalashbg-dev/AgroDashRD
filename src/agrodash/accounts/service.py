@@ -60,11 +60,9 @@ def create_user(
 def authenticate(session: Session, email: str, password: str, now: datetime | None = None) -> User:
     now = now or datetime.now(UTC)
     user = _find_by_email(session, normalize_email(email))
-    if user is None:
+    if user is None or not user.is_active or _is_locked(user, now):
         # Spend the same hashing time as a real check so timing does not reveal accounts.
         _verify(_dummy_hash(), password)
-        raise AuthenticationError
-    if not user.is_active or _is_locked(user, now):
         raise AuthenticationError
 
     if not _verify(user.password_hash, password):

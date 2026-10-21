@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from agrodash import cli
+from agrodash.accounts import service
 from agrodash.accounts.models import Role, User
 from agrodash.accounts.service import (
     LOCKOUT_DURATION,
@@ -100,6 +101,24 @@ def test_inactive_user_cannot_log_in(session, user):
 
     with pytest.raises(AuthenticationError, match="^Invalid email or password$"):
         authenticate(session, user.email, PASSWORD, now=NOW)
+
+
+@pytest.mark.parametrize("state", ["inactive", "locked", "unknown"])
+def test_refused_logins_spend_hashing_time(session, user, monkeypatch, state):
+    if state == "inactive":
+        user.is_active = False
+    if state == "locked":
+        user.locked_until = NOW + LOCKOUT_DURATION
+    session.commit()
+    email = "nobody@example.com" if state == "unknown" else user.email
+    verified = []
+    monkeypatch.setattr(service, "_verify", lambda *args: verified.append(args) or False)
+
+    with pytest.raises(AuthenticationError, match="^Invalid email or password$"):
+        authenticate(session, email, PASSWORD, now=NOW)
+
+    assert len(verified) == 1
+    assert session.get(User, user.id).failed_login_attempts == 0
 
 
 @pytest.mark.parametrize(
