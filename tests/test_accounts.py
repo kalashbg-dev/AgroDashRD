@@ -180,6 +180,37 @@ def test_create_admin_command_reports_unmigrated_database(tmp_path, monkeypatch,
     assert "error: database is unreachable or not migrated" in capsys.readouterr().err
 
 
+def test_create_admin_command_reports_invalid_settings_without_the_url(monkeypatch, capsys):
+    url = "sqlite:///secret-password.db"
+    monkeypatch.setenv("AGRODASH_ENV", "production")
+    monkeypatch.setenv("AGRODASH_DATABASE_URL", url)
+    get_settings.cache_clear()
+    monkeypatch.setattr("sys.stdin", io.StringIO(PASSWORD + "\n"))
+
+    exit_code = cli.main(["create-admin", "--email", "admin@example.com"])
+
+    get_settings.cache_clear()
+    err = capsys.readouterr().err
+    assert exit_code == 1
+    assert "error: invalid configuration" in err
+    assert "must point to PostgreSQL" in err
+    assert url not in err
+
+
+def test_create_user_reports_duplicates_that_race_the_check(session, user, monkeypatch):
+    monkeypatch.setattr(service, "_find_by_email", lambda *_: None)
+
+    with pytest.raises(AccountError, match="already registered"):
+        create_user(session, user.email, PASSWORD, Role.ADMIN)
+
+
+def test_create_admin_help_describes_password_input(capsys):
+    with pytest.raises(SystemExit):
+        cli.main(["create-admin", "--help"])
+
+    assert "read from stdin" in capsys.readouterr().out
+
+
 def test_create_admin_command_reports_errors(cli_database, monkeypatch, capsys):
     monkeypatch.setattr("sys.stdin", io.StringIO("short\n"))
 

@@ -5,6 +5,7 @@ from functools import lru_cache
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from agrodash.accounts.models import Role, User
@@ -53,7 +54,12 @@ def create_user(
 
     user = User(email=email, password_hash=_hasher.hash(password), role=role, full_name=full_name)
     session.add(user)
-    session.commit()
+    try:
+        session.commit()
+    except IntegrityError as error:
+        # Another request registered the same email between the check and the insert.
+        session.rollback()
+        raise AccountError(f"{email} is already registered") from error
     return user
 
 

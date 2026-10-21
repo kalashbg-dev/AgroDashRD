@@ -2,6 +2,7 @@ import argparse
 import getpass
 import sys
 
+from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -15,9 +16,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="agrodash", description="AgroDashRD management tasks")
     commands = parser.add_subparsers(dest="command", required=True)
 
+    create_admin_help = "create an ADMIN account (password read from stdin when not interactive)"
     create_admin = commands.add_parser(
-        "create-admin",
-        help="create an ADMIN account (password read from stdin when not interactive)",
+        "create-admin", help=create_admin_help, description=create_admin_help.capitalize()
     )
     create_admin.add_argument("--email", required=True)
     create_admin.add_argument("--full-name")
@@ -42,6 +43,11 @@ def _create_admin(args: argparse.Namespace) -> int:
         engine.dispose()
     except AccountError as error:
         print(f"error: {error}", file=sys.stderr)
+        return 1
+    except ValidationError as error:
+        # Only the messages: pydantic's full report would echo the database URL and its password.
+        messages = "; ".join(detail["msg"] for detail in error.errors())
+        print(f"error: invalid configuration: {messages}", file=sys.stderr)
         return 1
     except SQLAlchemyError:
         print(
