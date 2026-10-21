@@ -1,44 +1,22 @@
+# Local PostgreSQL for development. Set POSTGRES_PASSWORD in .env first.
 services:
-  # Servicio de Base de Datos (PostgreSQL 16)
   db:
     image: postgres:16-alpine
-    container_name: agrodash-db
-    restart: always
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-agrodash_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-secure_password_2026}
-      POSTGRES_DB: ${POSTGRES_DB:-agrodash_db}
+      POSTGRES_USER: ${POSTGRES_USER:-agrodash}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-agrodash}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    # Reachable only from this machine (for migrations and tests), never from the network.
     ports:
-      - "5432:5432"
-    networks:
-      - agrodash-network
-
-  # Servicio Backend (FastAPI)
-  backend:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: agrodash-backend
-    restart: always
-    depends_on:
-      - db
-    environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-agrodash_user}:${POSTGRES_PASSWORD:-secure_password_2026}@db:5432/${POSTGRES_DB:-agrodash_db}
-      SECRET_KEY: ${SECRET_KEY:-your_secret_key_change_me}
-      ALGORITHM: HS256
-      ACCESS_TOKEN_EXPIRE_MINUTES: 60
-    ports:
-      - "8000:8000"
-    networks:
-      - agrodash-network
-    # Comando para ejecutar migraciones y luego iniciar la app (opcional, si se usa alembic)
-    # command: sh -c "alembic upgrade head && uvicorn backend.app.main:app --host 0.0.0.0 --port 8000"
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
 volumes:
   postgres_data:
-
-networks:
-  agrodash-network:
-    driver: bridge
