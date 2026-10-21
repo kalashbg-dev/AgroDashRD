@@ -1,0 +1,40 @@
+from alembic import context
+
+import agrodash.catalog.models  # noqa: F401  (registers tables on Base.metadata)
+import agrodash.prices.models  # noqa: F401
+from agrodash.infra.db import Base, create_db_engine
+from agrodash.infra.settings import get_settings
+
+url = context.config.get_main_option("sqlalchemy.url") or get_settings().database_url
+# SQLite cannot ALTER most constraints; batch mode rebuilds tables instead.
+render_as_batch = url.startswith("sqlite")
+
+
+def run_migrations_offline() -> None:
+    context.configure(
+        url=url,
+        target_metadata=Base.metadata,
+        literal_binds=True,
+        render_as_batch=render_as_batch,
+    )
+    with context.begin_transaction():
+        context.run_migrations()
+
+
+def run_migrations_online() -> None:
+    engine = create_db_engine(url)
+    with engine.connect() as connection:
+        context.configure(
+            connection=connection,
+            target_metadata=Base.metadata,
+            render_as_batch=render_as_batch,
+        )
+        with context.begin_transaction():
+            context.run_migrations()
+    engine.dispose()
+
+
+if context.is_offline_mode():
+    run_migrations_offline()
+else:
+    run_migrations_online()

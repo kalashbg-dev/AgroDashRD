@@ -46,6 +46,7 @@ The migration runs in phases (F0 to F6); progress is tracked in [odd/tasks/agrod
 ```bash
 uv sync                 # create .venv and install dependencies
 cp .env.example .env    # adjust settings if needed
+uv run alembic upgrade head   # create or upgrade the database schema
 uv run pytest           # run the test suite
 uv run ruff check .     # lint
 uv run ruff format .    # format
@@ -59,6 +60,8 @@ Settings are read from `AGRODASH_*` environment variables or `.env` (see [.env.e
 |---|---|---|
 | `AGRODASH_ENV` | `development` | `development` or `production` |
 | `AGRODASH_DATABASE_URL` | `sqlite:///agrodash.db` | Production refuses to start on SQLite |
+
+Schema changes go through Alembic migrations in `src/agrodash/infra/migrations`: after editing a model, run `uv run alembic revision --autogenerate -m "<change>"` and review the generated file. Tests run every schema test on SQLite, and also on PostgreSQL when `AGRODASH_TEST_POSTGRES_URL` is set (CI does this).
 
 ## Documentation
 
