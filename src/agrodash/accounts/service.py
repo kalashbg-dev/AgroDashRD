@@ -4,7 +4,7 @@ from functools import lru_cache
 
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from agrodash.accounts.models import Role, User
@@ -66,11 +66,7 @@ def authenticate(session: Session, email: str, password: str, now: datetime | No
         raise AuthenticationError
 
     if not _verify(user.password_hash, password):
-        user.failed_login_attempts += 1
-        if user.failed_login_attempts >= MAX_FAILED_LOGINS:
-            user.locked_until = now + LOCKOUT_DURATION
-            user.failed_login_attempts = 0
-        session.commit()
+        _record_failed_login(session, user, now)
         raise AuthenticationError
 
     if _hasher.check_needs_rehash(user.password_hash):
@@ -84,6 +80,23 @@ def authenticate(session: Session, email: str, password: str, now: datetime | No
 
 def _find_by_email(session: Session, email: str) -> User | None:
     return session.scalar(select(User).where(User.email == email))
+
+
+def _record_failed_login(session: Session, user: User, now: datetime) -> None:
+    # Increment in SQL so concurrent failed logins cannot overwrite each other's count.
+    attempts = session.scalar(
+        update(User)
+        .where(User.id == user.id)
+        .values(failed_login_attempts=User.failed_login_attempts + 1)
+        .returning(User.failed_login_attempts)
+    )
+    if attempts >= MAX_FAILED_LOGINS:
+        session.execute(
+            update(User)
+            .where(User.id == user.id)
+            .values(locked_until=now + LOCKOUT_DURATION, failed_login_attempts=0)
+        )
+    session.commit()
 
 
 def _is_locked(user: User, now: datetime) -> bool:

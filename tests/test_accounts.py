@@ -158,6 +158,28 @@ def test_create_admin_command_reads_password_from_stdin(cli_database, monkeypatc
         assert authenticate(session, "owner@example.com", PASSWORD, now=NOW).role is Role.SUPERADMIN
 
 
+def test_create_admin_command_strips_windows_line_endings(cli_database, monkeypatch):
+    monkeypatch.setattr("sys.stdin", io.StringIO(PASSWORD + "\r\n"))
+
+    assert cli.main(["create-admin", "--email", "admin@example.com"]) == 0
+    from sqlalchemy.orm import Session
+
+    with Session(cli_database) as session:
+        assert authenticate(session, "admin@example.com", PASSWORD, now=NOW).role is Role.ADMIN
+
+
+def test_create_admin_command_reports_unmigrated_database(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("AGRODASH_DATABASE_URL", f"sqlite:///{tmp_path / 'empty.db'}")
+    get_settings.cache_clear()
+    monkeypatch.setattr("sys.stdin", io.StringIO(PASSWORD + "\n"))
+
+    exit_code = cli.main(["create-admin", "--email", "admin@example.com"])
+
+    get_settings.cache_clear()
+    assert exit_code == 1
+    assert "error: database is unreachable or not migrated" in capsys.readouterr().err
+
+
 def test_create_admin_command_reports_errors(cli_database, monkeypatch, capsys):
     monkeypatch.setattr("sys.stdin", io.StringIO("short\n"))
 

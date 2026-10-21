@@ -2,6 +2,7 @@ import argparse
 import getpass
 import sys
 
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from agrodash.accounts.models import Role
@@ -42,13 +43,19 @@ def _create_admin(args: argparse.Namespace) -> int:
     except AccountError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
+    except SQLAlchemyError:
+        print(
+            "error: database is unreachable or not migrated (run 'alembic upgrade head')",
+            file=sys.stderr,
+        )
+        return 1
     print(created)
     return 0
 
 
 def _read_password() -> str:
     if not sys.stdin.isatty():
-        return sys.stdin.readline().rstrip("\n")
+        return sys.stdin.readline().rstrip("\r\n")
     password = getpass.getpass("Password: ")
     if getpass.getpass("Repeat password: ") != password:
         raise AccountError("Passwords do not match")
