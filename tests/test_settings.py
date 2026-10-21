@@ -1,5 +1,6 @@
 import pytest
 from pydantic import ValidationError
+from sqlalchemy import create_engine
 
 from agrodash.infra.settings import Settings
 
@@ -51,7 +52,7 @@ def test_production_rejects_non_postgresql_urls(monkeypatch, url):
 
 
 @pytest.mark.parametrize(
-    "url", ["postgresql://u:p@db/agrodash", " postgresql+psycopg://u:p@db/agrodash "]
+    "url", ["postgresql+psycopg://u:p@db/agrodash", " postgresql+psycopg://u:p@db/agrodash "]
 )
 def test_production_accepts_postgresql_urls(monkeypatch, url):
     monkeypatch.setenv("AGRODASH_ENV", "production")
@@ -60,11 +61,15 @@ def test_production_accepts_postgresql_urls(monkeypatch, url):
     assert load().database_url == url.strip()
 
 
-def test_normalizes_short_postgres_scheme(monkeypatch):
+@pytest.mark.parametrize("url", ["postgres://u:p@db/agrodash", "postgresql://u:p@db/agrodash"])
+def test_driverless_postgres_urls_use_the_installed_psycopg_driver(monkeypatch, url):
     monkeypatch.setenv("AGRODASH_ENV", "production")
-    monkeypatch.setenv("AGRODASH_DATABASE_URL", "postgres://u:p@db/agrodash")
+    monkeypatch.setenv("AGRODASH_DATABASE_URL", url)
 
-    assert load().database_url == "postgresql://u:p@db/agrodash"
+    database_url = load().database_url
+
+    assert database_url == "postgresql+psycopg://u:p@db/agrodash"
+    assert create_engine(database_url).dialect.driver == "psycopg"
 
 
 def test_reads_values_from_env_file(tmp_path):

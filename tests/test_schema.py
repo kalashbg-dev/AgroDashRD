@@ -4,12 +4,14 @@ from decimal import Decimal
 import pytest
 from alembic import command
 from alembic.autogenerate import compare_metadata
+from alembic.config import Config
 from alembic.migration import MigrationContext
 from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 
 from agrodash.catalog.models import BaseUnit, Market, MarketKind, Product, ProductAlias, Unit
-from agrodash.infra.db import Base, alembic_config
+from agrodash.infra.db import MIGRATIONS_LOCATION, Base, alembic_config, create_db_engine
+from agrodash.infra.settings import get_settings
 from agrodash.prices.models import Price, PriceSource, PriceStatus, PriceType
 
 
@@ -127,3 +129,18 @@ def test_alembic_config_keeps_url_encoded_passwords():
     url = "postgresql+psycopg://user:p%40ss@db:5432/agrodash"
 
     assert alembic_config(url).get_main_option("sqlalchemy.url") == url
+
+
+def test_cli_migrations_read_the_database_url_from_settings(tmp_path, monkeypatch):
+    url = f"sqlite:///{tmp_path / 'cli.db'}"
+    monkeypatch.setenv("AGRODASH_DATABASE_URL", url)
+    get_settings.cache_clear()
+    config = Config()
+    config.set_main_option("script_location", MIGRATIONS_LOCATION)
+
+    try:
+        command.upgrade(config, "head")
+    finally:
+        get_settings.cache_clear()
+
+    assert "prices" in inspect(create_db_engine(url)).get_table_names()

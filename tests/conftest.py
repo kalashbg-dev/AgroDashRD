@@ -1,7 +1,7 @@
 import os
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import make_url, text
 from sqlalchemy.orm import Session
 
 from agrodash.infra.db import create_db_engine, upgrade_database
@@ -16,6 +16,9 @@ def database_url(request, tmp_path):
         return f"sqlite:///{tmp_path / 'test.db'}"
     if not POSTGRES_URL:
         pytest.skip("AGRODASH_TEST_POSTGRES_URL is not set")
+    # Each test wipes the schema, so only accept databases that are clearly disposable.
+    if not (make_url(POSTGRES_URL).database or "").endswith("_test"):
+        pytest.fail("AGRODASH_TEST_POSTGRES_URL must name a database ending in '_test'")
     engine = create_db_engine(POSTGRES_URL)
     with engine.begin() as connection:
         connection.execute(text("DROP SCHEMA public CASCADE"))
