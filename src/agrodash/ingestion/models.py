@@ -52,7 +52,8 @@ class IngestionRun(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     file_name: Mapped[str] = mapped_column(String(255))
     file_sha256: Mapped[str] = mapped_column(String(64), index=True)
-    layout: Mapped[SourceLayout] = mapped_column(enum_column(SourceLayout, "source_layout"))
+    # Unknown when the file could not be read at all.
+    layout: Mapped[SourceLayout | None] = mapped_column(enum_column(SourceLayout, "source_layout"))
     trigger: Mapped[IngestionTrigger] = mapped_column(
         enum_column(IngestionTrigger, "ingestion_trigger")
     )

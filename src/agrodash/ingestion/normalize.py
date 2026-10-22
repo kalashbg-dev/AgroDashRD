@@ -1,7 +1,8 @@
 """Turn the messy cells of the official price reports into typed values.
 
 Every function here is pure: the same cell always gives the same value, so ingestion can
-be re-run and tested without a database.
+be re-run and tested without a database. The fuzzy ones are cached because a report
+repeats the same few hundred names, units and dates across tens of thousands of rows.
 """
 
 import calendar
@@ -11,6 +12,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from difflib import SequenceMatcher
+from functools import cache
 
 from agrodash.catalog.models import BaseUnit
 
@@ -135,6 +137,7 @@ def fold(text: object) -> str:
     return " ".join(without_accents.decode().lower().split())
 
 
+@cache
 def name_key(name: str) -> str:
     """Key under which spelling variants of the same product name collide."""
     return " ".join(re.sub(r"[^a-z0-9]+", " ", fold(name)).split())
@@ -164,6 +167,7 @@ def same_product_name(left_key: str, right_key: str) -> bool:
     return SequenceMatcher(None, a, b).ratio() >= 0.8
 
 
+@cache
 def parse_week_date(week: object, month: object, year: object) -> date:
     """Date for "week N of month": day 1 + 7*(N-1), never past the month's end."""
     week_number = WEEK_PREFIXES.get(fold(week)[:3])
@@ -225,6 +229,7 @@ def _parse_decimal_text(text: str) -> Decimal:
         raise InvalidValue(f"unreadable price {text!r}") from error
 
 
+@cache
 def parse_unit(text: object) -> ParsedUnit | None:
     """Base unit and size of a selling unit label, or None when it cannot be known.
 
@@ -254,6 +259,7 @@ def _plain(number: Decimal) -> str:
     return f"{number.normalize():f}"
 
 
+@cache
 def normalize_category(rubro: object) -> str:
     letters = _letters(fold(rubro).replace(" y ", " "))
     best_score, best = max((_typo_similarity(letters, _letters(c)), c) for c in CATEGORIES)

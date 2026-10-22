@@ -32,7 +32,7 @@ def upgrade() -> None:
                 create_constraint=False,
                 length=20,
             ),
-            nullable=False,
+            nullable=True,
         ),
         sa.Column(
             "trigger",
