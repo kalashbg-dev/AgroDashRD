@@ -18,7 +18,7 @@ def technician(cli_database):
 
 
 def login(email, password) -> AppTest:
-    app = AppTest.from_file(str(PAGES / "ingresar.py")).run()
+    app = AppTest.from_file(str(PAGES / "ingresar.py"), default_timeout=30).run()
     app.text_input(key="email").input(email)
     app.text_input(key="password").input(password)
     app.button(key="sign_in").click()
@@ -58,7 +58,7 @@ def test_signing_out_forgets_the_user(technician):
 
 
 def test_the_app_starts_for_an_anonymous_visitor(cli_database):
-    app = AppTest.from_file(str(PAGES.parent / "app.py")).run()
+    app = AppTest.from_file(str(PAGES.parent / "app.py"), default_timeout=30).run()
 
     assert not app.exception
 

@@ -172,7 +172,7 @@ def _ingest_one(session: Session, file_name: str, content: bytes, trigger) -> bo
 
 SHOWN_NAMES = 20
 # Internal ids forecasting needs; the export keeps the columns it always had.
-EXPORT_HIDDEN_FIELDS = ("product_id", "market_id")
+EXPORT_HIDDEN_FIELDS = ("product_id", "market_id", "not_ready")
 
 
 def _quality_report(args: argparse.Namespace) -> int:

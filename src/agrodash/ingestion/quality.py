@@ -39,6 +39,8 @@ class SeriesCoverage:
     weeks: int
     coverage: float
     ready: bool
+    # Why it is not ready: "inactive", "short", "sparse", "stale"; empty when ready.
+    not_ready: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -202,6 +204,16 @@ def series_coverage(session: Session) -> list[SeriesCoverage]:
     ) in rows:
         months = (last_on.year - first_on.year) * 12 + last_on.month - first_on.month + 1
         coverage = counted_weeks / (4 * months)
+        reasons = tuple(
+            reason
+            for reason, applies in (
+                ("inactive", not (product_active and market_active)),
+                ("short", weeks < MIN_WEEKS),
+                ("sparse", coverage < MIN_COVERAGE),
+                ("stale", latest_by_type[price_type] - last_on > MAX_STALENESS),
+            )
+            if applies
+        )
         series.append(
             SeriesCoverage(
                 product_id=product_id,
@@ -214,12 +226,8 @@ def series_coverage(session: Session) -> list[SeriesCoverage]:
                 last_on=last_on,
                 weeks=weeks,
                 coverage=coverage,
-                # An admin retires a product or market from forecasting by deactivating it.
-                ready=product_active
-                and market_active
-                and weeks >= MIN_WEEKS
-                and coverage >= MIN_COVERAGE
-                and latest_by_type[price_type] - last_on <= MAX_STALENESS,
+                ready=not reasons,
+                not_ready=reasons,
             )
         )
     return series
