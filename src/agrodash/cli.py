@@ -164,6 +164,8 @@ def _ingest_one(session: Session, file_name: str, content: bytes, trigger) -> bo
 
 
 SHOWN_NAMES = 20
+# Internal ids forecasting needs; the export keeps the columns it always had.
+EXPORT_HIDDEN_FIELDS = ("product_id", "market_id")
 
 
 def _quality_report(args: argparse.Namespace) -> int:
@@ -202,8 +204,12 @@ def _quality_report(args: argparse.Namespace) -> int:
     if args.series_csv:
         try:
             with args.series_csv.open("w", newline="", encoding="utf-8") as file:
-                fields = list(quality.SeriesCoverage.__annotations__)
-                writer = csv.DictWriter(file, fieldnames=fields)
+                fields = [
+                    field
+                    for field in quality.SeriesCoverage.__annotations__
+                    if field not in EXPORT_HIDDEN_FIELDS
+                ]
+                writer = csv.DictWriter(file, fieldnames=fields, extrasaction="ignore")
                 writer.writeheader()
                 writer.writerows(asdict(series) for series in report.series)
         except OSError as error:

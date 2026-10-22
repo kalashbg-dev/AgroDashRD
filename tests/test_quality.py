@@ -120,19 +120,19 @@ def test_quality_report_command_prints_the_summary_and_exports_series(
     assert "Series: 17, ready to forecast: 0" in out
     rows = list(csv.DictReader(export.open(encoding="utf-8")))
     assert len(rows) == 17
-    assert set(rows[0]) == {
-        "product_id",
-        "market_id",
-        "product",
-        "market",
-        "price_type",
-        "base_unit",
-        "first_on",
-        "last_on",
-        "weeks",
-        "coverage",
-        "ready",
-    }
+    # Same columns, in the same order, as before forecasting needed the series ids.
+    with export.open(encoding="utf-8") as file:
+        assert next(csv.reader(file)) == [
+            "product",
+            "market",
+            "price_type",
+            "base_unit",
+            "first_on",
+            "last_on",
+            "weeks",
+            "coverage",
+            "ready",
+        ]
 
 
 def test_renamed_products_are_suggested_for_review(session):
