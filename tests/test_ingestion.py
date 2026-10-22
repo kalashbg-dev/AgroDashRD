@@ -389,3 +389,33 @@ def test_rows_without_a_name_or_too_short_are_rejected_not_repaired(session):
     assert reasons(run) == {RejectionReason.UNEXPECTED_LAYOUT: 2}
     assert run.values_missing == 1
     assert sorted(product.name for product in session.query(Product)) == ["Batata", "Papa"]
+
+
+def test_a_short_row_with_a_partial_date_is_rejected_not_repaired(session):
+    content = wholesale(
+        "Papa;Raices-Tuberculos;Mayorista;Quintal;1500;Primera;Agosto;2017",
+        "Yuca;Raices-Tuberculos;Mayorista;Quintal;1200;3333",
+        "Batata;Raices-Tuberculos;Mayorista;Quintal;1100;Primera;Agosto;2017",
+    )
+
+    run = load(session, "mayorista.csv", content)
+
+    assert reasons(run) == {RejectionReason.UNEXPECTED_LAYOUT: 1}
+    assert run.rows_corrected == 0
+
+
+def test_an_empty_name_cell_in_a_workbook_is_rejected(session):
+    workbook = openpyxl.Workbook()
+    workbook.active.append(
+        ["Papa", "Raices", "Mayorista", "Quintal", 1500, "Primera", "Agosto", 2017]
+    )
+    workbook.active.append(
+        [None, "Raices", "Mayorista", "Quintal", 1200, "Primera", "Agosto", 2017]
+    )
+    content = io.BytesIO()
+    workbook.save(content)
+
+    run = load(session, "mayorista.xlsx", content.getvalue())
+
+    assert reasons(run) == {RejectionReason.UNEXPECTED_LAYOUT: 1}
+    assert [product.name for product in session.query(Product)] == ["Papa"]
