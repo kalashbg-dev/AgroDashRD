@@ -358,3 +358,17 @@ def test_a_repeat_far_inside_a_mislabeled_block_stays_a_duplicate(session):
 
     assert session.query(Product).count() == 4
     assert reasons(run) == {RejectionReason.DUPLICATE_PRICE: 4}
+
+
+def test_a_valid_date_between_rows_of_another_week_is_kept(session):
+    content = wholesale(
+        "Papa;Raices-Tuberculos;Mayorista;Quintal;1500;Primera;Agosto;2017",
+        "Yuca;Raices-Tuberculos;Mayorista;Quintal;1200;Segunda;Agosto;2017",
+        "Batata;Raices-Tuberculos;Mayorista;Quintal;1100;Primera;Agosto;2017",
+    )
+
+    run = load(session, "mayorista.csv", content)
+
+    yuca = session.query(Price).join(Product).filter(Product.name == "Yuca").one()
+    assert yuca.observed_on == date(2017, 8, 8)
+    assert run.rows_corrected == 0

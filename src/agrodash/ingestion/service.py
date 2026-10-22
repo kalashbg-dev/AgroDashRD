@@ -203,9 +203,10 @@ class _Load:
     def _prepare(self, numbered, date_columns):
         """Fix what the reports get wrong row by row, keeping each original for quarantine.
 
-        - A row whose date differs from the two rows around it, while those agree, takes
-          their date: the reports are written in week blocks, so it is a typo ("3333").
-          A row with no date at all is left alone: its cells were shifted.
+        - A row whose date cannot be read ("3333", "|") takes the date of the two rows
+          around it when those agree: the reports are written in week blocks. A readable
+          date is never changed, and a row with no date at all is left alone: its cells
+          were shifted.
         - The same name listed again right below itself (within ADJACENT_REPEAT_ROWS) in
           one week block is two products the report does not tell apart (Berenjena
           Pompadur is 30-43% dearer in its first row); the repeat becomes
@@ -219,7 +220,13 @@ class _Load:
             label = labels[index]
             before = labels[index - 1] if index else None
             after = labels[index + 1] if index + 1 < len(labels) else None
-            if any(label) and before is not None and before == after and label != before:
+            if (
+                any(label)
+                and before is not None
+                and before == after
+                and label != before
+                and not _readable_date(row, date_columns)
+            ):
                 source = numbered[index - 1][1]
                 for column in date_columns:
                     row[column] = source[column]
@@ -468,6 +475,14 @@ def _market_kind(market: str, price_type: PriceType) -> MarketKind:
     if fold(market) in SUPERMARKET_NAMES:
         return MarketKind.SUPERMARKET
     return MarketKind.WHOLESALE if price_type is PriceType.WHOLESALE else MarketKind.RETAIL
+
+
+def _readable_date(row: list[object], date_columns) -> bool:
+    try:
+        parse_week_date(*(row[column] if column < len(row) else None for column in date_columns))
+    except InvalidValue:
+        return False
+    return True
 
 
 def _date_label(row: list[object], date_columns) -> tuple[str, ...]:
