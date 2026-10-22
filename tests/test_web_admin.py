@@ -16,7 +16,7 @@ from agrodash.prices.reports import report_price
 from agrodash.web.admin import load_report
 
 FIXTURES = Path(__file__).parent / "fixtures"
-PAGE = Path(__file__).parent.parent / "src" / "agrodash" / "web" / "pages" / "admin.py"
+PAGE = Path(__file__).parent.parent / "src" / "agrodash" / "web" / "views" / "admin.py"
 PASSWORD = "correct horse battery"
 
 

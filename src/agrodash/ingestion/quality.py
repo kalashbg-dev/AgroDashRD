@@ -91,7 +91,7 @@ def build_report(session: Session) -> QualityReport:
         units=session.scalar(select(func.count(Unit.id))),
         latest_observation=latest,
         series=series_coverage(session),
-        rename_candidates=_rename_candidates(session),
+        rename_candidates=rename_candidates(session),
     )
 
 
@@ -111,7 +111,7 @@ def _rejections(session: Session) -> dict[str, int]:
     return {str(reason): count for reason, count in rows}
 
 
-def _rename_candidates(session: Session) -> list[tuple[str, str, int]]:
+def rename_candidates(session: Session) -> list[tuple[str, str, int]]:
     """(old name, new name, days between) for products that look renamed."""
     spans = session.execute(
         select(

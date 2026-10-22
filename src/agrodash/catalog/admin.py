@@ -1,0 +1,110 @@
+"""Catalog changes an admin makes: confirm aliases, rename, merge and retire products."""
+
+from sqlalchemy import func, select, update
+from sqlalchemy.orm import Session, aliased
+
+from agrodash.accounts.models import User
+from agrodash.accounts.service import can_manage
+from agrodash.catalog.models import Market, Product, ProductAlias
+from agrodash.ingestion.normalize import clean_name
+from agrodash.prices.models import Price, PriceSource
+
+
+class CatalogError(ValueError):
+    """A catalog change that cannot be made, safe to show to the admin."""
+
+
+def confirm_alias(session: Session, actor: User, alias_id: int) -> ProductAlias:
+    _check(actor)
+    alias = _get(session, ProductAlias, alias_id)
+    alias.reviewed = True
+    session.commit()
+    return alias
+
+
+def rename_product(session: Session, actor: User, product_id: int, name: str) -> Product:
+    _check(actor)
+    product = _get(session, Product, product_id)
+    name = clean_name(name)[:120]
+    if not name:
+        raise CatalogError("The name cannot be empty")
+    taken = session.scalar(select(Product.id).where(Product.name == name, Product.id != product.id))
+    if taken:
+        raise CatalogError(f"A product named {name!r} already exists")
+    product.name = name
+    session.commit()
+    return product
+
+
+def merge_products(session: Session, actor: User, source_id: int, target_id: int) -> Product:
+    """Move every price and alias of `source` to `target` and retire `source`.
+
+    For products the reports renamed ("Cilantro/ grande/ primera" became "Cilantro,
+    primera"). The source stays, inactive, so old forecast runs keep their references.
+    It refuses when both products have an official price for the same market, week and
+    type: choosing which one to drop is a decision, not a merge.
+    """
+    _check(actor)
+    if source_id == target_id:
+        raise CatalogError("A product cannot be merged into itself")
+    source = _get(session, Product, source_id)
+    target = _get(session, Product, target_id)
+    theirs = aliased(Price)
+    clashes = session.scalar(
+        select(func.count())
+        .select_from(Price)
+        .join(
+            theirs,
+            (theirs.market_id == Price.market_id)
+            & (theirs.observed_on == Price.observed_on)
+            & (theirs.price_type == Price.price_type),
+        )
+        .where(
+            Price.product_id == source.id,
+            Price.source == PriceSource.OFFICIAL,
+            theirs.product_id == target.id,
+            theirs.source == PriceSource.OFFICIAL,
+        )
+    )
+    if clashes:
+        raise CatalogError(
+            f"{clashes} week{'s' if clashes > 1 else ''} where both products have an official "
+            "price; fix or delete one of them first"
+        )
+    session.execute(update(Price).where(Price.product_id == source.id).values(product_id=target.id))
+    session.execute(
+        update(ProductAlias)
+        .where(ProductAlias.product_id == source.id)
+        .values(product_id=target.id, reviewed=True)
+    )
+    source.is_active = False
+    session.commit()
+    return target
+
+
+def set_product_active(session: Session, actor: User, product_id: int, *, active: bool) -> Product:
+    _check(actor)
+    product = _get(session, Product, product_id)
+    product.is_active = active
+    session.commit()
+    return product
+
+
+def set_market_active(session: Session, actor: User, market_id: int, *, active: bool) -> Market:
+    _check(actor)
+    market = _get(session, Market, market_id)
+    market.is_active = active
+    session.commit()
+    return market
+
+
+def _check(actor: User) -> None:
+    if not (actor.is_active and can_manage(actor.role)):
+        raise CatalogError("Your account cannot change the catalog")
+
+
+def _get(session: Session, model, row_id: int):
+    row = session.get(model, row_id)
+    if row is None:
+        raise CatalogError(f"Unknown {model.__tablename__[:-1]}")
+    return row

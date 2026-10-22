@@ -38,7 +38,7 @@ Assumption: the wholesale CSV belongs to "Mercado Nuevo" (legacy assumption) unt
 | T5c | S6 | inline | done (5bde761) | public pages: Precios (latest prices, history chart) and Pronóstico (forecast with ranges, "sin pronóstico") |
 | T5d | S6 | inline | done | Reportar precio (TECNICO and up) |
 | T5e | S6 | inline | done | Admin: upload and ingest, quarantine, validate field reports, users |
-| T5f | S6 | inline | pending | Admin catalog: review aliases, rename and merge products (rename candidates, "(fila 2)"), activate or deactivate products and markets |
+| T5f | S6 | inline | done | Admin catalog: review aliases, rename and merge products (rename candidates, "(fila 2)"), activate or deactivate products and markets |
 | T6 | S7 | inline | pending | |
 
 Route evidence: phases depend on each other (no independent parallel units), so no writer trigger fires; work stays inline.
@@ -112,4 +112,12 @@ Route evidence: phases depend on each other (no independent parallel units), so 
   - Real pipeline on PostgreSQL: the same 290,162 prices, 1,153 rejections and 475 series forecast as on SQLite (ingest 2.5 min, forecast --skip-benchmark 15 s).
   - Pending manual steps for the user: add AGRODASH_DRIVE_FILE_IDS to .env.example (permissions deny the agent), resolve the old GitGuardian alert, then push feat/f4-forecasting and open its PR.
 - L27 (2026-10-22, F5 start): PR #8 (F4) is merged into main 583bdd2, together with the user's .env.example commit. User decision (AskUserQuestion) on the AGRICULTOR role: "Quitar el rol (Recomendado)": reading prices and forecasts needs no account, so the roles are TECNICO, ADMIN and SUPERADMIN. F5 branch feat/f5-web starts from main.
+- L28 (F5 web): every page was checked in 390px screenshots (light and dark) through Playwright in Docker, and the screenshots found real defects:
+  - pickers opened on products without data, so they now filter by price type and open on a current product;
+  - rubros were shown without accents;
+  - the price table overflowed;
+  - money broke Markdown ("RD$ … RD$" rendered as a formula);
+  - the y axis showed "5.000000";
+  - users stayed on the account page after signing in.
+  The last cause: a folder named pages/ next to app.py makes Streamlit build an automatic multipage app, whose URLs run each page file directly and skip app.py and its role-based navigation. The pages were never exposed, because each page calls require() itself, but the menu and redirect did not work. The folder was renamed to views/, and the app now redirects to the role's page after sign-in. Known limitation: Streamlit's file uploader shows "Upload" and "50MB per file" in English. 373 passed.
 - L3: plan approved; data-quality gate added to S4/S5. Engram mirror pending: `mem_current_project` is ambiguous from `~/Downloads` (agrodashrd vs another repo).

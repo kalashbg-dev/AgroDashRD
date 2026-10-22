@@ -1,16 +1,16 @@
 import pytest
 
 from agrodash.accounts.models import Role
-from agrodash.web.access import can_open, visible_pages
+from agrodash.web.access import can_open, landing_page, visible_pages
 
 
 @pytest.mark.parametrize(
     ("role", "pages"),
     [
         (None, ["precios", "pronostico", "ingresar"]),
-        (Role.TECNICO, ["precios", "pronostico", "reportar"]),
-        (Role.ADMIN, ["precios", "pronostico", "reportar", "admin", "catalogo"]),
-        (Role.SUPERADMIN, ["precios", "pronostico", "reportar", "admin", "catalogo"]),
+        (Role.TECNICO, ["precios", "pronostico", "ingresar", "reportar"]),
+        (Role.ADMIN, ["precios", "pronostico", "ingresar", "reportar", "admin", "catalogo"]),
+        (Role.SUPERADMIN, ["precios", "pronostico", "ingresar", "reportar", "admin", "catalogo"]),
     ],
 )
 def test_each_role_sees_its_pages(role, pages):
@@ -35,3 +35,16 @@ def test_pages_check_the_role_themselves(role, page, allowed):
 
 def test_unknown_pages_are_never_open():
     assert can_open(Role.SUPERADMIN, "debug") is False
+
+
+@pytest.mark.parametrize(
+    ("role", "page"),
+    [
+        (None, "precios"),
+        (Role.TECNICO, "reportar"),
+        (Role.ADMIN, "admin"),
+        (Role.SUPERADMIN, "admin"),
+    ],
+)
+def test_each_role_starts_on_its_own_page(role, page):
+    assert landing_page(role) == page

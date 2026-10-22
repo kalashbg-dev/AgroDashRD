@@ -8,12 +8,14 @@ def _attempt_sign_in() -> None:
     # Never keep the password in the session once it was used.
     st.session_state["password"] = ""
     st.session_state["sign_in_failed"] = not succeeded
+    st.session_state["just_signed_in"] = succeeded
 
 
 user = current_user()
 if user:
-    st.title("Sesión iniciada")
-    st.write(f"Has ingresado como **{user['name'] or user['email']}** ({user['role'].lower()}).")
+    st.title("Mi cuenta")
+    # Plain text: Markdown would turn the email address into a mailto link.
+    st.text(f"{user['name'] or user['email']} · {user['role'].lower()}")
     st.button("Cerrar sesión", key="sign_out", on_click=sign_out)
 else:
     st.title("Ingresar")

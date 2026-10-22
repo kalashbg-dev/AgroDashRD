@@ -12,6 +12,9 @@ _EXACT = {
     "You cannot deactivate your own account": "No puedes desactivar tu propia cuenta.",
     "Your account cannot report prices": "Tu cuenta no puede reportar precios.",
     "Your account cannot review reports": "Tu cuenta no puede revisar reportes.",
+    "Your account cannot change the catalog": "Tu cuenta no puede cambiar el catálogo.",
+    "A product cannot be merged into itself": "Un producto no se puede fusionar consigo mismo.",
+    "The name cannot be empty": "El nombre no puede estar vacío.",
 }
 _UNITS = {"lb": "libra", "unit": "unidad", "l": "litro"}
 _PATTERNS = [
@@ -22,6 +25,12 @@ _PATTERNS = [
     (r"You cannot create (\w+) accounts", "No puedes crear cuentas {0}."),
     (r"You cannot manage (\w+) accounts", "No puedes gestionar cuentas {0}."),
     (r"(\S+@\S+) is already registered", "{0} ya está registrado."),
+    (r"A product named ('.+') already exists", "Ya existe un producto llamado {0}."),
+    (
+        r"(\d+) weeks? where both products have an official price; fix or delete one of them first",
+        "Los dos productos tienen precio oficial en {0} semana(s) iguales; corrige o elimina "
+        "uno de esos precios primero.",
+    ),
     (
         r".+ (?:retail|wholesale) prices are per (\w+); choose a unit in \w+",
         "Esta serie se mide por {unit}: elige una unidad en {unit}.",

@@ -14,7 +14,7 @@ from agrodash.prices.models import Price, PriceSource, PriceStatus, PriceType
 from agrodash.prices.queries import units_for_report
 from agrodash.prices.reports import local_today
 
-PAGE = Path(__file__).parent.parent / "src" / "agrodash" / "web" / "pages" / "reportar.py"
+PAGE = Path(__file__).parent.parent / "src" / "agrodash" / "web" / "views" / "reportar.py"
 
 
 @pytest.fixture

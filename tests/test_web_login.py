@@ -7,7 +7,7 @@ from streamlit.testing.v1 import AppTest
 from agrodash.accounts.models import Role
 from agrodash.accounts.service import create_user
 
-PAGES = Path(__file__).parent.parent / "src" / "agrodash" / "web" / "pages"
+PAGES = Path(__file__).parent.parent / "src" / "agrodash" / "web" / "views"
 PASSWORD = "correct horse battery"
 
 

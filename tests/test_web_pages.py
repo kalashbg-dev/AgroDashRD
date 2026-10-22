@@ -12,7 +12,7 @@ from agrodash.ingestion import quality
 from agrodash.ingestion.normalize import week_slot
 from agrodash.prices.models import Price, PriceSource, PriceStatus, PriceType
 
-PAGES = Path(__file__).parent.parent / "src" / "agrodash" / "web" / "pages"
+PAGES = Path(__file__).parent.parent / "src" / "agrodash" / "web" / "views"
 
 
 @pytest.fixture
