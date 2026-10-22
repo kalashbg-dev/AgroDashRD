@@ -1,74 +1,58 @@
-# Guía de Despliegue de AgroStack
+# Guía de despliegue de AgroDashRD
 
-## 1. Configuración del Servidor Backend (Python + PostgreSQL)
+Esta guía describe cómo desplegar lo que existe hoy: el paquete `agrodash` (catálogo, precios, ingesta de datos, cuentas y pronósticos) sobre PostgreSQL. La aplicación web (Streamlit) y la imagen Docker única llegan en las fases F5 y F6; esta guía se completará entonces.
 
-### 1.1 Base de Datos (Hostinger / Render / Supabase)
-Para la versión "definitiva" multi-usuario, recomendamos un servicio gestionado (PostgreSQL as a Service).
+## 1. Base de datos PostgreSQL
 
-1.  **Crear Instancia:**
-    *   En Hostinger o Render, busca "PostgreSQL Database".
-    *   Copia la `DATABASE_URL` (formato `postgresql://user:pass@host:5432/dbname`).
-2.  **Migrar Datos:**
-    *   Usa `pgAdmin` o `DBeaver` (gratuito) para conectar a tu base de datos remota.
-    *   Ejecuta el script SQL de creación de tablas (ver anexo en propuesta técnica).
+1. Creá una base PostgreSQL 16 gestionada (Render, Supabase, Neon o un VPS propio).
+2. Copiá su URL de conexión, con la forma `postgresql://usuario:clave@host:5432/agrodash`.
+3. No la escribas en ningún archivo del repositorio: va solo en variables de entorno del servidor.
 
-### 1.2 Backend (FastAPI en Hostinger VPS o Render)
+## 2. Variables de entorno
 
-#### Opción A: Render (Gratis/Bajo Costo) - Recomendado MVP+
-1.  **Repo en GitHub:** Asegúrate que tu código backend (Python) esté en un repositorio.
-2.  **Crear Web Service:**
-    *   Conecta tu cuenta de GitHub.
-    *   Build Command: `pip install -r requirements.txt`
-    *   Start Command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
-3.  **Variables de Entorno:**
-    *   Añade `DATABASE_URL` con la conexión de tu base de datos.
-    *   Añade `SECRET_KEY` para tokens JWT.
+| Variable | Valor en producción |
+|---|---|
+| `AGRODASH_ENV` | `production` (rechaza arrancar si la base no es PostgreSQL) |
+| `AGRODASH_DATABASE_URL` | la URL del paso 1 |
+| `AGRODASH_DRIVE_FILE_IDS` | opcional; por defecto, los reportes oficiales mayorista (.xlsx) y minorista (.xls) |
 
-#### Opción B: Hostinger VPS (Control Total)
-1.  **SSH:** Conecta a tu VPS: `ssh root@tu-ip`.
-2.  **Instalar Docker:**
-    ```bash
-    apt update && apt install docker.io docker-compose -y
-    ```
-3.  **Desplegar con Docker Compose:**
-    *   Crea un archivo `docker-compose.yml` que levante tu app Python y (opcionalmente) la base de datos si no usas servicio gestionado.
-    *   Ejecuta `docker-compose up -d --build`.
-4.  **Dominio:** Configura Nginx como proxy inverso para apuntar `api.tudominio.com` al puerto de tu app (ej: 8000).
+Definilas en el panel del proveedor o en el entorno del proceso, no en un `.env` dentro del servidor: `.env` se lee desde la carpeta en la que se ejecuta el comando.
 
----
+## 3. Instalar y preparar la base
 
-## 2. Desarrollo y Publicación de App Móvil (Flutter)
+```bash
+uv sync --frozen                      # instala las dependencias exactas de uv.lock
+uv run alembic upgrade head           # crea o actualiza todas las tablas
+uv run agrodash create-admin --email admin@ejemplo.com --superadmin
+```
 
-### 2.1 Entorno de Desarrollo
-1.  Instala [Flutter SDK](https://flutter.dev/docs/get-started/install).
-2.  Verifica instalación: `flutter doctor`.
+La contraseña del administrador se pide por teclado (o se lee de la entrada estándar), nunca como argumento.
 
-### 2.2 Compilación para Android (Google Play)
-1.  **Configurar firma:**
-    *   Genera una llave de upload (`keytool`).
-    *   Configura `android/key.properties`.
-2.  **Build Release:**
-    ```bash
-    flutter build apk --release
-    # O para Google Play App Bundle:
-    flutter build appbundle
-    ```
-3.  **Distribución:**
-    *   Sube el `.aab` a la Google Play Console.
+## 4. Primera carga de datos
 
-### 2.3 Compilación para iOS (App Store) - Requiere Mac
-1.  Abre `ios/Runner.xcworkspace` en Xcode.
-2.  Configura "Signing & Capabilities" con tu cuenta de desarrollador Apple ($99/año).
-3.  Product -> Archive -> Distribute App.
+```bash
+uv run agrodash ingest --drive        # descarga y carga la historia oficial desde Google Drive
+uv run agrodash quality-report        # revisa rechazos, nombres sin revisar y series listas
+```
 
-### 2.4 Versión Web (PWA)
-1.  Habilita web: `flutter config --enable-web`.
-2.  Build: `flutter build web --release`.
-3.  Sube el contenido de `build/web` a cualquier hosting estático (Netlify, Vercel, o carpeta pública en Hostinger).
+La base de producción debe cargarse **desde cero** con la versión actual del código: una base cargada con versiones anteriores conserva factores de unidad viejos (por ejemplo, los rangos de peso como "Unidad/8-10 libra").
 
----
+## 5. Tareas programadas
 
-## 3. Mantenimiento y Automatización (CI/CD)
-Para evitar despliegues manuales, configura GitHub Actions:
-*   Cada vez que hagas `push` a `main`, el servidor Render detectará cambios y re-desplegará automáticamente.
-*   Para Flutter, puedes usar Codemagic (gratis hasta cierto límite) para generar los APKs automáticamente.
+Programá una tarea semanal (cron del servidor o "cron job" del proveedor) que ejecute:
+
+```bash
+uv run agrodash ingest --drive
+```
+
+y, a continuación, el pronóstico:
+
+```bash
+uv run agrodash forecast
+```
+
+Volver a cargar un archivo ya cargado no hace nada, así que es seguro ejecutarla más seguido. El pronóstico tarda entre 4 y 5 minutos porque vuelve a medir los modelos alternativos contra el último precio; `--skip-benchmark` lo hace en segundos.
+
+## 6. Copias de seguridad
+
+Activá las copias automáticas diarias del proveedor de PostgreSQL. Las tablas importantes son `prices`, `products`, `product_aliases`, `units`, `users` e `ingestion_runs`; todo lo demás se puede regenerar.

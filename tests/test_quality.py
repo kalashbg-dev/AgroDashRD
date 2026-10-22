@@ -120,17 +120,19 @@ def test_quality_report_command_prints_the_summary_and_exports_series(
     assert "Series: 17, ready to forecast: 0" in out
     rows = list(csv.DictReader(export.open(encoding="utf-8")))
     assert len(rows) == 17
-    assert set(rows[0]) == {
-        "product",
-        "market",
-        "price_type",
-        "base_unit",
-        "first_on",
-        "last_on",
-        "weeks",
-        "coverage",
-        "ready",
-    }
+    # Same columns, in the same order, as before forecasting needed the series ids.
+    with export.open(encoding="utf-8") as file:
+        assert next(csv.reader(file)) == [
+            "product",
+            "market",
+            "price_type",
+            "base_unit",
+            "first_on",
+            "last_on",
+            "weeks",
+            "coverage",
+            "ready",
+        ]
 
 
 def test_renamed_products_are_suggested_for_review(session):
@@ -150,7 +152,7 @@ def test_renamed_products_are_suggested_for_review(session):
     ]
 
 
-def test_rejections_count_only_the_latest_load_of_each_report_type(session):
+def test_another_export_of_the_same_report_does_not_count_rejections_twice(session):
     for name in ("minorista.csv", "minorista.xls", "mayorista.csv"):
         ingest_file(session, (FIXTURES / name).read_bytes(), name, IngestionTrigger.FILE)
 
@@ -158,6 +160,18 @@ def test_rejections_count_only_the_latest_load_of_each_report_type(session):
 
     assert rejections["invalid_price"] == 2
     assert sum(rejections.values()) == 7
+
+
+def test_rejections_of_every_file_that_added_prices_are_counted(session):
+    for name, week, price in (("semana1.csv", "Primera", 1500), ("semana2.csv", "Segunda", 1600)):
+        rows = [
+            f"Papa;Raices;Mayorista;Quintal;{price};{week};Agosto;2017",
+            f"Ajo;Raices;Mayorista;Saco;10;{week};Agosto;2017",
+        ]
+        ingest_file(session, "\r\n".join(rows).encode(), name, IngestionTrigger.FILE)
+
+    # Weekly files are different reports: the first week's rejection must not vanish.
+    assert build_report(session).rejections == {"unknown_unit": 2}
 
 
 def test_staleness_is_measured_within_each_price_type(session, monkeypatch):
@@ -196,3 +210,20 @@ def test_a_series_that_changes_unit_is_reported_once_per_unit(session):
     series = [(s.product, s.base_unit, s.weeks) for s in build_report(session).series]
 
     assert series == [("Pepino", "lb", 4), ("Pepino", "unit", 4)]
+
+
+def test_inactive_products_and_markets_are_never_ready_to_forecast(session, monkeypatch):
+    monkeypatch.setattr(quality, "MIN_WEEKS", 8)
+    full = {(2026, month): [1, 2, 3, 4] for month in (7, 8, 9)}
+    retired = add_series(session, "Retirado", full)
+    add_series(session, "Activo", full)
+    retired.is_active = False
+    session.commit()
+
+    ready = {series.product: series.ready for series in build_report(session).series}
+
+    assert ready == {"Activo": True, "Retirado": False}
+
+    session.query(Market).one().is_active = False
+    session.commit()
+    assert not any(series.ready for series in build_report(session).series)

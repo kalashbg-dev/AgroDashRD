@@ -1,3 +1,5 @@
+> **Documento histórico.** Describe el sistema anterior (FastAPI, Flutter, Streamlit original), que fue reemplazado por el paquete `src/agrodash`. Se conserva como registro; para el estado actual ver [README.md](README.md).
+
 # Propuesta Técnica: Transformación Digital AgroDashRD
 
 ## 1. Arquitectura Recomendada: "AgroStack"

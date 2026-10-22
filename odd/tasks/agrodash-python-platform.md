@@ -10,7 +10,7 @@ Branch: one stacked branch per phase (`feat/f0-foundations` → `feat/f1-schema`
 - S3 (F2, point 2): accounts with roles (AGRICULTOR, TECNICO, ADMIN, SUPERADMIN), argon2 hashing, lockout after repeated failed logins, `create-admin` CLI, docker-compose without exposed DB or default passwords. Public read without login; login only for reporting, uploading and validating. Remove `backend/` once ported. Close with the `security-review` skill.
 - S4 (F3, point 4): hybrid ingestion. Parsers for xlsx/xls/csv (Latin-1, `;`, headerless wholesale CSV, wide retail sheet), normalization of week words with typos, rubros, units and "N/D"; product alias catalog drafted by fuzzy matching and marked unreviewed; quarantine table with reasons; idempotent runs keyed by file hash; public Drive download by file id; admin upload; field reports stored as pending with outlier check against the official series; full history load. User request: "Que haremos con esta conclusion: el problema principal hoy no es qué modelo usar sino la calidad de los datos. Hace falta un catálogo de productos con sus variantes de nombre y una tabla de conversión de unidades. Sin eso, cualquier modelo aprende ruido." F3 closes with a data-quality report (rejections by reason, unmapped names, weekly coverage per series).
 - S5 (F4, point 5): correct weekly dates; seasonal-naive baseline; AutoETS/AutoARIMA/AutoTheta (statsforecast); rolling-origin backtest with MASE; per-series model selection; global LightGBM (mlforecast); predictions table with intervals and model version; batch job. Only series that pass the data-quality threshold are trained; others are shown as "sin pronóstico". Week handling (L17): reports name weeks Primera..Quinta, and 51-58 of 110 months carry a fifth week with no calendar rule behind it (the best weekday rule matches 68 of 108 months). Stored dates are ordering slots (days 1, 8, 15, 22 and 29, or 28 in a short February), decoded with `week_of_month`. Forecasting must index each series by report period (the ordered set of published (year, month, week) periods), not by calendar days. Months with only the first week published (August 2019, July 2023 in both reports) are missing periods, not zeros.
-- S6 (F5): Streamlit mobile-first pages: Precios, Pronóstico, Reportar precio, Admin (upload, validate reports, rejects, users). Port useful legacy charts (use `dataviz` skill), verify at narrow viewport, delete `legacy/`.
+- S6 (F5): Streamlit mobile-first pages: Precios, Pronóstico, Reportar precio, Admin (upload, validate reports, rejects, users). Port useful legacy charts (use `dataviz` skill; `legacy/` was deleted during the F4 audit and remains readable with `git show 75c584b:legacy/<file>`), verify at narrow viewport.
 - S7 (F6, points 6 and 7): single Docker image for app and job, docs (README, deploy guide, audit report) updated, final `code-review`.
 
 Assumption: the wholesale CSV belongs to "Mercado Nuevo" (legacy assumption) until the user confirms.
@@ -29,7 +29,10 @@ Assumption: the wholesale CSV belongs to "Mercado Nuevo" (legacy assumption) unt
 | T3e | S4 | inline | done (718a54a, follow-up fixes) | data-quality report (`agrodash quality-report`), full history load evidence, docs |
 | T3f | S4 | inline | done (f410bcd, 1ef7e5c, 483f58c, follow-up) | rejected-rows audit fixes (L13-L16) |
 | T3g | S4 | inline | done | week semantics, range units, name-less rows (L17-L18) |
-| T4 | S5 | inline | pending | |
+| T4a | S5 | inline | done (3e61e50) | series builder: report-period calendar, ready series, gap interpolation, future period slots |
+| T4b | S5 | inline | done | last-price forecast with calibrated ranges and a per-run benchmark (user decision L24) |
+| T4c | S5 | inline | done (52901da) | schema: forecast_runs, series evaluations, forecasts (migration, own commit) |
+| T4d | S5 | inline | done (8b8c6a7, df62152, 893a2f3, 53971ba); F4 closed (L26) | `agrodash forecast` batch job storing results; series without forecast listed as "sin pronóstico"; docs |
 | T5 | S6 | inline | pending | |
 | T6 | S7 | inline | pending | |
 
@@ -69,4 +72,38 @@ Route evidence: phases depend on each other (no independent parallel units), so 
   - A row with neither name nor price counts as a missing value; a row with prices but no name is rejected.
   - Real data: 290,162 prices, 54 units, 475 series ready.
 - L19 (T3g review): review of f8b1e89..008be14 approved and acknowledged. The short-row guard and the empty-name rule are pinned by tests in 5b3d902; removing the guard makes the test fail with IndexError. Deployment note for F6: any database loaded before 008be14 keeps the old upper-bound factors for weight-range units, because unit aliases are cached by raw text. Build production from an empty database with `alembic upgrade head` and `agrodash ingest --drive`. Only scratch databases exist today. 258 passed.
+- L20 (2026-10-22, T4 plan): F2 and F3 are merged into main (PRs #4-#7); F4 branch feat/f4-forecasting starts from main 75c584b. LightGBM was dropped: on macOS it needs the system library libomp (dlopen failed). The global model is scikit-learn's HistGradientBoostingRegressor through mlforecast: the same histogram gradient-boosting family, with no system dependency. The real data has 492 published report periods over about 9 years (about 54 a year, because of fifth weeks), so the yearly season is 54 periods. A backtest of Naive, SeasonalNaive(54), AutoETS, AutoTheta(54), AutoARIMA and the GBM was started on the 475 ready series (h=4, 6 windows, MASE scaled by the in-sample one-step naive).
+- L21 (2026-10-22, user): "resuelve los hallazgos, todos antes de continuar. revisa el backtest". All 8 audit findings were fixed:
+  - rejections are now counted for every load that added prices (cbc2c03);
+  - single week_slot() and letters() helpers (cbc2c03);
+  - field report dates use Santo Domingo UTC-4 (d430e83);
+  - row repair moved to the pure module ingestion/repair.py (5af9758);
+  - markets.location dropped (ce9e326, migration), and inactive products or markets are never ready (3abb81c);
+  - legacy/ and the outdated guides were deleted, GUIA_DESPLIEGUE.md rewritten and the historical docs marked (e4f43e6).
+  278 passed.
+- L22 (T4 backtest): the first full run (6 models x 475 series, n_jobs=-1) ran over 30 minutes because macOS spawned worker processes that recompiled numba again and again; it was stopped. On a 60-series sample with n_jobs=1, the median MASE (h=4, 6 windows) was Naive 1.162, Theta 1.256, AutoARIMA 1.271, AutoETS 1.297, GBM 1.386, AutoTheta(54) 1.411 and SeasonalNaive(54) 2.721. AutoARIMA took 237 s for 60 series (about 31 min for 475) and won few series, so it was dropped. Yearly seasonality on the period axis does not help, so the seasonal models were dropped too. A per-series best beat Naive in only 52% of series. A holdout selection experiment is running on all 475 series: select on 4 windows, test on 2, comparing always-Naive with selection with and without a margin over Naive.
+- L23 (T4 holdout): the model was selected on 4 windows and tested on 2 unseen windows over all 475 series. Holdout median MASE: always Naive 1.063; best-per-series 1.125; best only when it beats Naive by 5% 1.093, by 10% 1.087, by 15% 1.086. Single models: Naive 1.063, GBM 1.234, AutoETS 1.279, Theta 1.285. When the selection picked another model, it beat Naive in only 5-9% of series: the per-series "best model" is noise. Ratio-quantile ranges were checked on unseen windows: with 1 year of history (54 periods) the 95% range held 96.0% of prices and the 80% range 86.7%; with 6 months the 95% range held 92.6%; with 2-5 years the ranges were wider (80% range held 88-91%).
+- L24 (2026-10-22, user decision via AskUserQuestion): "Último precio + rango (Recomendado)": the forecast is the last price, with 80% and 95% ranges from one year of ratio quantiles. Each run re-measures AutoETS, Theta and GBM against it and stores their MASE. This replaces the S5 per-series selection. The ranges are widened to contain the forecast (otherwise a series that only rose showed a range above its own forecast). Forecasts target the 4 periods after the latest published report, and the range of a series whose last price is older spans gap + step. Real run: 475 series forecast for 2026-10-01..2026-10-22 and 1,727 not ready; 4 min with the benchmark (median MASE Naive 0.96, AutoETS 1.16, GBM 1.16, Theta 1.18), 12 s with --skip-benchmark. 293 passed.
+- L25 (F4 verification): the independent verifier passed S5 as amended by L24 and 7 of the 8 L21 fixes:
+  - period axis: 498 periods, the gap months interpolated, week slots round-trip;
+  - forecasts: 475 series, all targeting 2026-10-01..22, values equal to the last price, 0 disordered ranges, inactive products and markets excluded;
+  - benchmark: only Naive selected; a failed run is recorded;
+  - ingestion: repair.py gives identical results to the old code on the real files (same price, quarantine and product hashes).
+  Blocker: migration 9b40c1b7dccc failed on a SQLite database holding prices, because the table rebuild was blocked by foreign keys and left a temporary table. Fixed in 07908a0 with native DROP COLUMN and a test on a populated database; a copy of the real database also upgraded from an old revision. Advisories fixed:
+  - stale running forecast runs are closed when a new run starts;
+  - failure messages keep only the first line, without SQL;
+  - the README no longer says "ML-powered";
+  - the job takes 4-5 min (307 s measured).
+  Calibration correction to L23: 86.7%/96.0% held only on the last two windows; over six windows the 80% range held about 82.5% (75.9-87.7%) and the 95% range about 93.4% (90.6-96.2%). The docs now state those figures.
+- L26 (F4 close, 2026-10-22):
+  - Native review in slices:
+    - slice 1 (75c584b..52901da): CRITICAL finding: the ids added to SeriesCoverage changed the quality-report CSV columns. Corrected in b64665b (cherry-picked as 893a2f3), then the review recovered and approved.
+    - slice 2 (audit fixes): approved.
+    - slice 3a (e4f43e6, only deletions: legacy/ and old guides, 8,652 lines): not reviewable (lens_context_budget_exceeded); covered by the independent verifier.
+    - slice 3b (engine, job, migration fix): approved. Advisories fixed in 53971ba: a failing benchmark no longer discards forecasts; unknown benchmark models are refused; GBM scores use a left join; the CLI always disposes the engine.
+    - The whole-F4 candidate always exceeds the budget.
+  - Environment: the user approved installing Colima + docker + docker-compose via Homebrew. PostgreSQL 16 runs from docker-compose.yml with a random password kept outside the repo.
+  - The full suite against SQLite and PostgreSQL: 408 passed.
+  - Real pipeline on PostgreSQL: the same 290,162 prices, 1,153 rejections and 475 series forecast as on SQLite (ingest 2.5 min, forecast --skip-benchmark 15 s).
+  - Pending manual steps for the user: add AGRODASH_DRIVE_FILE_IDS to .env.example (permissions deny the agent), resolve the old GitGuardian alert, then push feat/f4-forecasting and open its PR.
 - L3: plan approved; data-quality gate added to S4/S5. Engram mirror pending: `mem_current_project` is ambiguous from `~/Downloads` (agrodashrd vs another repo).
