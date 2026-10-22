@@ -32,7 +32,7 @@ Assumption: the wholesale CSV belongs to "Mercado Nuevo" (legacy assumption) unt
 | T4a | S5 | inline | done (3e61e50) | series builder: report-period calendar, ready series, gap interpolation, future period slots |
 | T4b | S5 | inline | done | last-price forecast with calibrated ranges and a per-run benchmark (user decision L24) |
 | T4c | S5 | inline | done (52901da) | schema: forecast_runs, series evaluations, forecasts (migration, own commit) |
-| T4d | S5 | inline | done | `agrodash forecast` batch job storing results; series without forecast listed as "sin pronóstico"; docs |
+| T4d | S5 | inline | done (8b8c6a7, df62152, 893a2f3, 53971ba); F4 closed (L26) | `agrodash forecast` batch job storing results; series without forecast listed as "sin pronóstico"; docs |
 | T5 | S6 | inline | pending | |
 | T6 | S7 | inline | pending | |
 
@@ -95,4 +95,15 @@ Route evidence: phases depend on each other (no independent parallel units), so 
   - the README no longer says "ML-powered";
   - the job takes 4-5 min (307 s measured).
   Calibration correction to L23: 86.7%/96.0% held only on the last two windows; over six windows the 80% range held about 82.5% (75.9-87.7%) and the 95% range about 93.4% (90.6-96.2%). The docs now state those figures.
+- L26 (F4 close, 2026-10-22):
+  - Native review in slices:
+    - slice 1 (75c584b..52901da): CRITICAL finding: the ids added to SeriesCoverage changed the quality-report CSV columns. Corrected in b64665b (cherry-picked as 893a2f3), then the review recovered and approved.
+    - slice 2 (audit fixes): approved.
+    - slice 3a (e4f43e6, only deletions: legacy/ and old guides, 8,652 lines): not reviewable (lens_context_budget_exceeded); covered by the independent verifier.
+    - slice 3b (engine, job, migration fix): approved. Advisories fixed in 53971ba: a failing benchmark no longer discards forecasts; unknown benchmark models are refused; GBM scores use a left join; the CLI always disposes the engine.
+    - The whole-F4 candidate always exceeds the budget.
+  - Environment: the user approved installing Colima + docker + docker-compose via Homebrew. PostgreSQL 16 runs from docker-compose.yml with a random password kept outside the repo.
+  - The full suite against SQLite and PostgreSQL: 408 passed.
+  - Real pipeline on PostgreSQL: the same 290,162 prices, 1,153 rejections and 475 series forecast as on SQLite (ingest 2.5 min, forecast --skip-benchmark 15 s).
+  - Pending manual steps for the user: add AGRODASH_DRIVE_FILE_IDS to .env.example (permissions deny the agent), resolve the old GitGuardian alert, then push feat/f4-forecasting and open its PR.
 - L3: plan approved; data-quality gate added to S4/S5. Engram mirror pending: `mem_current_project` is ambiguous from `~/Downloads` (agrodashrd vs another repo).
