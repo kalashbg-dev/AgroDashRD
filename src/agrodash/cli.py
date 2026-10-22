@@ -1,6 +1,8 @@
 import argparse
+import csv
 import getpass
 import sys
+from dataclasses import asdict
 from pathlib import Path
 
 from pydantic import ValidationError
@@ -11,6 +13,7 @@ from agrodash.accounts.models import Role
 from agrodash.accounts.service import AccountError, create_user
 from agrodash.infra.db import create_db_engine
 from agrodash.infra.settings import get_settings
+from agrodash.ingestion import quality
 from agrodash.ingestion.drive import DriveError, download
 from agrodash.ingestion.models import IngestionTrigger
 from agrodash.ingestion.service import IngestionError, ingest_file, loaded_run
@@ -37,12 +40,22 @@ def main(argv: list[str] | None = None) -> int:
         "--drive", action="store_true", help="download and load AGRODASH_DRIVE_FILE_IDS"
     )
 
+    quality_help = "summarize rejected rows, unreviewed names and series ready to forecast"
+    quality_report = commands.add_parser(
+        "quality-report", help=quality_help, description=_sentence(quality_help)
+    )
+    quality_report.add_argument(
+        "--series-csv", type=Path, help="also write every series with its coverage to this file"
+    )
+
     args = parser.parse_args(argv)
     if args.command == "ingest" and not (args.files or args.drive):
         ingest.error("give files to load or --drive")
     try:
         if args.command == "create-admin":
             return _create_admin(args)
+        if args.command == "quality-report":
+            return _quality_report(args)
         return _ingest(args)
     except ValidationError as error:
         # Only the messages: pydantic's full report would echo the database URL and its password.
@@ -134,6 +147,43 @@ def _ingest_one(session: Session, file_name: str, content: bytes, trigger) -> bo
         f"{run.values_missing} missing values (run {run.id})"
     )
     return True
+
+
+def _quality_report(args: argparse.Namespace) -> int:
+    engine = create_db_engine(get_settings().database_url)
+    with Session(engine) as session:
+        report = quality.build_report(session)
+    engine.dispose()
+
+    prices = report.official_prices
+    print(
+        f"Official prices: {sum(prices.values())} "
+        f"({prices.get('wholesale', 0)} wholesale, {prices.get('retail', 0)} retail)"
+    )
+    print(f"Latest observation: {report.latest_observation or '-'}")
+    print(f"Pending field reports: {report.pending_reports}")
+    print(f"Quarantine: {sum(report.rejections.values())} rejections")
+    for reason, count in report.rejections.items():
+        print(f"  {reason}: {count}")
+    print(
+        f"Catalog: {report.products} products, {report.aliases} name aliases "
+        f"({len(report.unreviewed_aliases)} unreviewed), {report.units} units"
+    )
+    print(
+        f"Series: {len(report.series)}, ready to forecast: {len(report.ready_series)} "
+        f"(at least {quality.MIN_WEEKS} weeks, {quality.MIN_COVERAGE:.0%} of weeks 1-4 "
+        f"covered, a price in the last {quality.MAX_STALENESS.days // 7} weeks)"
+    )
+    print(f"Possible renamed products: {len(report.rename_candidates)}")
+    for old, new, days in report.rename_candidates:
+        print(f"  {old} -> {new} ({days} days later)")
+    if args.series_csv:
+        with args.series_csv.open("w", newline="", encoding="utf-8") as file:
+            writer = csv.DictWriter(file, fieldnames=list(quality.SeriesCoverage.__annotations__))
+            writer.writeheader()
+            writer.writerows(asdict(series) for series in report.series)
+        print(f"Wrote {len(report.series)} series to {args.series_csv}")
+    return 0
 
 
 if __name__ == "__main__":
