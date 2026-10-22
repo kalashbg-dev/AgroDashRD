@@ -59,10 +59,11 @@ def test_report_counts_rejections_by_reason_and_unreviewed_aliases(session):
         "unit_mismatch": 1,
         "unknown_unit": 1,
     }
-    assert report.official_prices == {PriceType.WHOLESALE: 4}
-    assert (report.products, report.aliases) == (3, 3)
+    assert report.official_prices == {PriceType.WHOLESALE: 5}
+    assert (report.products, report.aliases) == (4, 4)
     assert sorted(report.unreviewed_aliases) == [
         ("cilantro long standing primera", "Cilantro (Long Standing), primera"),
+        ("leche liquida", "Leche (Líquida)"),
         ("platano barahonero primera", "Plátano (Barahonero), primera"),
     ]
 
@@ -72,10 +73,11 @@ def test_series_coverage_counts_weeks_one_to_four_between_first_and_last_price(s
 
     series = build_report(session).series[0]
 
-    assert (series.product, series.market, series.price_type) == (
+    assert (series.product, series.market, series.price_type, series.base_unit) == (
         "Mango",
         "Mercado Nuevo",
         "retail",
+        "lb",
     )
     assert (series.first_on, series.last_on, series.weeks) == (
         date(2026, 7, 1),
@@ -111,17 +113,18 @@ def test_quality_report_command_prints_the_summary_and_exports_series(
     assert cli.main(["quality-report", "--series-csv", str(export)]) == 0
 
     out = capsys.readouterr().out
-    assert "Official prices: 17 (4 wholesale, 13 retail)" in out
+    assert "Official prices: 18 (5 wholesale, 13 retail)" in out
     assert "Quarantine: 7 rejections" in out
     assert "  unit_mismatch: 1" in out
     assert "Catalog: 5 products, 5 name aliases (5 unreviewed), " in out
-    assert "Series: 16, ready to forecast: 0" in out
+    assert "Series: 17, ready to forecast: 0" in out
     rows = list(csv.DictReader(export.open(encoding="utf-8")))
-    assert len(rows) == 16
+    assert len(rows) == 17
     assert set(rows[0]) == {
         "product",
         "market",
         "price_type",
+        "base_unit",
         "first_on",
         "last_on",
         "weeks",
@@ -179,6 +182,17 @@ def test_quality_report_lists_unreviewed_names_and_reports_bad_export_paths(
 
     captured = capsys.readouterr()
     assert exit_code == 1
-    assert "Unreviewed names (3):" in captured.out
+    assert "Unreviewed names (4):" in captured.out
     assert "  cilantro long standing primera -> Cilantro (Long Standing), primera" in captured.out
     assert "error: cannot write" in captured.err
+
+
+def test_a_series_that_changes_unit_is_reported_once_per_unit(session):
+    weeks = ["Primera", "Segunda", "Tercera", "Cuarta"]
+    rows = [f"Pepino;Legumbres-Hortalizas;Mayorista;Saco/90 lb;600;{w};Enero;2024" for w in weeks]
+    rows += [f"Pepino;Legumbres-Hortalizas;Mayorista;Ciento;900;{w};Febrero;2024" for w in weeks]
+    ingest_file(session, "\r\n".join(rows).encode(), "m.csv", IngestionTrigger.FILE)
+
+    series = [(s.product, s.base_unit, s.weeks) for s in build_report(session).series]
+
+    assert series == [("Pepino", "lb", 4), ("Pepino", "unit", 4)]

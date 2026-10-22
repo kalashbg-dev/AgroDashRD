@@ -62,6 +62,7 @@ CATEGORIES = [
 ]
 UNKNOWN_CATEGORY = "Otros"
 
+_ENYE_AS_SEMICOLON = re.compile(r"(?<=[A-Za-zÁÉÍÓÚáéíóú]);(?=[a-záéíóú])")
 MISSING_TEXT = {"", "-", "n/d", "nd", "n/a", "0"}
 
 POUNDS_PER_KILO = Decimal("2.20462")
@@ -147,6 +148,11 @@ def clean_name(name: str) -> str:
     return " ".join(str(name).split())
 
 
+def repair_name(name: str) -> str:
+    """Undo an export bug that wrote 'ñ' as ';' inside words ("peque;o")."""
+    return _ENYE_AS_SEMICOLON.sub("ñ", str(name))
+
+
 def same_product_name(left_key: str, right_key: str) -> bool:
     """Whether two name keys differ only by a typo in one word.
 
@@ -208,7 +214,8 @@ def parse_amount(value: object) -> Decimal | None:
         amount = Decimal(str(value))
     else:
         text = str(value).strip()
-        if text.lower() in MISSING_TEXT:
+        # Excel error cells (#¡REF!, #DIV/0!, #N/A) and a lone "." hold no price either.
+        if text.lower() in MISSING_TEXT or text.startswith("#") or text == ".":
             return None
         amount = _parse_decimal_text(text)
     if not amount.is_finite():
@@ -243,10 +250,17 @@ def parse_unit(text: object) -> ParsedUnit | None:
         return None
     if folded in MEASURES:
         return _unit(*MEASURES[folded])
-    quantity = re.search(r"(\d+(?:[.,]\d+)?)\s*([a-z]+)", folded)
-    if quantity and quantity[2] in MEASURES:
-        base_unit, size = MEASURES[quantity[2]]
-        return _unit(base_unit, Decimal(quantity[1].replace(",", ".")) * size)
+    sizes = [
+        (MEASURES[word], Decimal(number.replace(",", ".")))
+        for number, word in re.findall(r"(\d+(?:[.,]\d+)?)\s*/?\s*([a-z]+)", folded)
+        if word in MEASURES
+    ]
+    if sizes:
+        # "Saco/180 unid/125/lib" states a count and a weight; compare by weight.
+        (base_unit, size), quantity = next(
+            (entry for entry in sizes if entry[0][0] is BaseUnit.POUND), sizes[0]
+        )
+        return _unit(base_unit, quantity * size)
     last_word = re.sub(r"[^a-z]", "", folded.rsplit("/", 1)[-1])
     if "/" in folded and last_word in MEASURES:
         return _unit(*MEASURES[last_word])

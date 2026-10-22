@@ -35,6 +35,7 @@ from agrodash.ingestion.normalize import (
     normalize_category,
     parse_amount,
     parse_week_date,
+    repair_name,
 )
 from agrodash.ingestion.readers import UnreadableFile, detect_layout, is_blank, read_rows
 from agrodash.prices.models import (
@@ -50,6 +51,12 @@ MAX_FILE_BYTES = 50 * 1024 * 1024
 # The wholesale report has no market column; it is collected at Mercado Nuevo.
 WHOLESALE_MARKET = "Mercado Nuevo"
 WHOLESALE_COLUMNS = 8
+WHOLESALE_DATE_COLUMNS = (5, 6, 7)
+RETAIL_DATE_COLUMNS = (11, 12, 13)
+# How close a repeated name must be to count as a second product rather than a duplicate.
+ADJACENT_REPEAT_ROWS = 3
+# A base unit used this many weeks is a real way of selling the product, not a typo.
+MIN_UNIT_WEEKS = 4
 RETAIL_COLUMNS = 14
 RETAIL_MARKET_COLUMNS = range(4, 11)
 SUPERMARKET_NAMES = {"supermercado"}
@@ -164,31 +171,78 @@ class _Load:
         self.observations: list[_Observation] = []
         # Observations that passed every check, whether new or already stored.
         self.accepted = 0
+        # Cells exactly as read, by row number, so quarantine shows the source.
+        self.originals: dict[int, list[object]] = {}
 
     def load(self, rows: list[list[object]]) -> None:
         if self.run.layout is SourceLayout.RETAIL:
             if len(rows[0]) < RETAIL_COLUMNS:
                 raise IngestionError("The retail header needs 7 market columns before Semana")
             markets = [clean_name(rows[0][column]) for column in RETAIL_MARKET_COLUMNS]
-            self._read_rows(rows[1:], 2, lambda n, row: self._retail_row(n, row, markets))
+            self._read_rows(
+                rows[1:], 2, RETAIL_DATE_COLUMNS, lambda n, row: self._retail_row(n, row, markets)
+            )
         else:
-            self._read_rows(rows, 1, self._wholesale_row)
+            self._read_rows(rows, 1, WHOLESALE_DATE_COLUMNS, self._wholesale_row)
         self._store()
         if self.rejections and not self.accepted:
             # Most likely not a price report, or one in a layout we misread. Failing keeps
             # the file loadable again instead of marking it done with nothing stored.
             raise IngestionError("No row could be loaded; check that the file is a price report")
 
-    def _read_rows(self, rows, first_line, parse_row) -> None:
-        for row_number, row in enumerate(rows, start=first_line):
-            if is_blank(row):
-                continue
+    def _read_rows(self, rows, first_line, date_columns, parse_row) -> None:
+        numbered = [
+            (row_number, list(row))
+            for row_number, row in enumerate(rows, start=first_line)
+            if not is_blank(row)
+        ]
+        for row_number, row in self._prepare(numbered, date_columns):
             self.run.rows_read += 1
-            parse_row(row_number, list(row))
+            parse_row(row_number, row)
+
+    def _prepare(self, numbered, date_columns):
+        """Fix what the reports get wrong row by row, keeping each original for quarantine.
+
+        - A row whose date differs from the two rows around it, while those agree, takes
+          their date: the reports are written in week blocks, so it is a typo ("3333").
+          A row with no date at all is left alone: its cells were shifted.
+        - The same name listed again right below itself (within ADJACENT_REPEAT_ROWS) in
+          one week block is two products the report does not tell apart (Berenjena
+          Pompadur is 30-43% dearer in its first row); the repeat becomes
+          "<name> (fila 2)" so both series are kept. A repeat further away is a block
+          that holds two weeks under one label, and stays a duplicate.
+        """
+        labels = [_date_label(row, date_columns) for _, row in numbered]
+        block, listed, last_seen = None, Counter(), {}
+        for index, (row_number, row) in enumerate(numbered):
+            self.originals[row_number] = list(row)
+            label = labels[index]
+            before = labels[index - 1] if index else None
+            after = labels[index + 1] if index + 1 < len(labels) else None
+            if any(label) and before is not None and before == after and label != before:
+                source = numbered[index - 1][1]
+                for column in date_columns:
+                    row[column] = source[column]
+                label = before
+                self.run.rows_corrected += 1
+            if label != block:
+                block, listed, last_seen = label, Counter(), {}
+            name = repair_name(row[0] if row[0] is not None else "")
+            key = name_key(name)
+            if key in last_seen and index - last_seen[key] <= ADJACENT_REPEAT_ROWS:
+                listed[key] += 1
+                name = f"{clean_name(name)} (fila {listed[key] + 1})"
+            else:
+                listed[key] = 0
+            last_seen[key] = index
+            row[0] = name
+            yield row_number, row
 
     def _wholesale_row(self, row_number: int, row: list[object]) -> None:
-        if len(row) < WHOLESALE_COLUMNS or _letters(row[2]) != "mayorista":
-            self._reject(row_number, row, RejectionReason.UNEXPECTED_LAYOUT, "expected 'Mayorista'")
+        # The type column is often damaged (#NAME?, a rubro, blank) on sound rows; only a
+        # row that says it belongs to the other report is out of place.
+        if len(row) < WHOLESALE_COLUMNS or _letters(row[2]) == "minorista":
+            self._reject(row_number, row, RejectionReason.UNEXPECTED_LAYOUT, "not a wholesale row")
             return
         name, rubro, _, unit_text, amount_cell, week, month, year = row[:WHOLESALE_COLUMNS]
         amounts = self._amounts(row_number, row, [(WHOLESALE_MARKET, amount_cell)])
@@ -201,8 +255,8 @@ class _Load:
         )
 
     def _retail_row(self, row_number: int, row: list[object], markets: list[str]) -> None:
-        if len(row) < RETAIL_COLUMNS or _letters(row[2]) != "minorista":
-            self._reject(row_number, row, RejectionReason.UNEXPECTED_LAYOUT, "expected 'Minorista'")
+        if len(row) < RETAIL_COLUMNS or _letters(row[2]) == "mayorista":
+            self._reject(row_number, row, RejectionReason.UNEXPECTED_LAYOUT, "not a retail row")
             return
         cells = [
             (market, row[column])
@@ -289,11 +343,12 @@ class _Load:
         prices = []
         for observation, product, market in resolved:
             unit = observation.unit
-            series_unit = series_units[(product.id, observation.price_type)]
-            if unit.base_unit != series_unit:
+            series_bases = series_units[(product.id, observation.price_type)]
+            if unit.base_unit not in series_bases:
+                priced_per = " or ".join(sorted(series_bases))
                 detail = (
                     f"{unit.label} cannot join the {observation.price_type} series of "
-                    f"{product.name}, priced per {series_unit}"
+                    f"{product.name}, priced per {priced_per}"
                 )
                 self._reject_observation(observation, RejectionReason.UNIT_MISMATCH, detail)
                 continue
@@ -332,27 +387,40 @@ class _Load:
         # A retail row can have several rejected cells; count each row once.
         self.run.rows_rejected = len({rejection["row_number"] for rejection in self.rejections})
 
-    def _series_base_units(self, resolved, product_ids: set[int]) -> dict[tuple, BaseUnit]:
-        """Base unit of each (product, price type) series: what stored prices use, else
-        what most rows of this file use. Wholesale and retail may differ (melons are sold
-        by the pound wholesale and by the piece retail), but one series never mixes them.
+    def _series_base_units(self, resolved, product_ids: set[int]) -> dict[tuple, set[BaseUnit]]:
+        """Base units each (product, price type) may be priced in.
+
+        A unit used for at least MIN_UNIT_WEEKS weeks (stored and incoming together) is a
+        real way of selling the product and gets its own series: pepino retail moved from
+        the pound to the piece in 2024. Wholesale and retail may differ too (melons are
+        sold by the pound wholesale and by the piece retail). Otherwise the most used unit
+        wins and a stray label is rejected.
         """
-        counts = self.session.execute(
-            select(Price.product_id, Price.price_type, Unit.base_unit, func.count())
+        weeks: dict[tuple, Counter] = {}
+        stored = self.session.execute(
+            select(
+                Price.product_id,
+                Price.price_type,
+                Unit.base_unit,
+                func.count(func.distinct(Price.observed_on)),
+            )
             .join(Unit, Price.unit_id == Unit.id)
             .where(Price.source == PriceSource.OFFICIAL, Price.product_id.in_(product_ids))
             .group_by(Price.product_id, Price.price_type, Unit.base_unit)
         )
-        stored: dict[tuple, tuple[int, BaseUnit]] = {}
-        for product_id, price_type, base_unit, count in counts:
-            key = (product_id, price_type)
-            if key not in stored or count > stored[key][0]:
-                stored[key] = (count, base_unit)
-        incoming = _majority(
-            ((product.id, observation.price_type), observation.unit.base_unit)
-            for observation, product, _ in resolved
-        )
-        return incoming | {key: base_unit for key, (_, base_unit) in stored.items()}
+        for product_id, price_type, base_unit, count in stored:
+            weeks.setdefault((product_id, price_type), Counter())[base_unit] += count
+        incoming: dict[tuple, set] = {}
+        for observation, product, _ in resolved:
+            key = (product.id, observation.price_type, observation.unit.base_unit)
+            incoming.setdefault(key, set()).add(observation.observed_on)
+        for (product_id, price_type, base_unit), dates in incoming.items():
+            weeks.setdefault((product_id, price_type), Counter())[base_unit] += len(dates)
+        return {
+            key: {base for base, count in counter.items() if count >= MIN_UNIT_WEEKS}
+            or {counter.most_common(1)[0][0]}
+            for key, counter in weeks.items()
+        }
 
     def _stored_keys(self, product_ids: set[int]) -> set[tuple]:
         price_type = (
@@ -378,7 +446,9 @@ class _Load:
                 "row_number": row_number,
                 "reason": reason,
                 "detail": detail[:200],
-                "raw_values": json.dumps(row, ensure_ascii=False, default=str),
+                "raw_values": json.dumps(
+                    self.originals.get(row_number, row), ensure_ascii=False, default=str
+                ),
             }
         )
 
@@ -398,6 +468,10 @@ def _market_kind(market: str, price_type: PriceType) -> MarketKind:
     if fold(market) in SUPERMARKET_NAMES:
         return MarketKind.SUPERMARKET
     return MarketKind.WHOLESALE if price_type is PriceType.WHOLESALE else MarketKind.RETAIL
+
+
+def _date_label(row: list[object], date_columns) -> tuple[str, ...]:
+    return tuple(fold(row[column]) if column < len(row) else "" for column in date_columns)
 
 
 def _letters(cell: object) -> str:

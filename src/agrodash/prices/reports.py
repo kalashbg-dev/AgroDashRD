@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from statistics import median
 
-from sqlalchemy import func, select, update
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from agrodash.accounts.models import User
@@ -60,7 +60,7 @@ def report_price(
         )
 
     converted = per_base_unit(amount, unit.factor)
-    reference = _official_median(session, product, market, price_type, observed_on)
+    reference = _official_median(session, product, market, price_type, series_unit, observed_on)
     price = Price(
         product=product,
         market=market,
@@ -112,8 +112,12 @@ def pending_reports(session: Session) -> list[Price]:
 
 
 def _series_base_unit(session: Session, product: Product, price_type: PriceType) -> BaseUnit:
-    """Base unit the official series uses, or the product's when there is no series yet."""
-    most_used = session.scalar(
+    """Base unit of the latest official price, or the product's when there is no series yet.
+
+    Series can change unit over time (pepino retail moved from the pound to the piece),
+    and a report describes today, so it follows the current one.
+    """
+    latest = session.scalar(
         select(Unit.base_unit)
         .join(Price, Price.unit_id == Unit.id)
         .where(
@@ -121,24 +125,33 @@ def _series_base_unit(session: Session, product: Product, price_type: PriceType)
             Price.price_type == price_type,
             Price.source == PriceSource.OFFICIAL,
         )
-        .group_by(Unit.base_unit)
-        .order_by(func.count().desc(), Unit.base_unit)
+        .order_by(Price.observed_on.desc(), Price.id.desc())
         .limit(1)
     )
-    return most_used or product.base_unit
+    return latest or product.base_unit
 
 
 def _official_median(
-    session: Session, product: Product, market: Market, price_type: PriceType, on: date
+    session: Session,
+    product: Product,
+    market: Market,
+    price_type: PriceType,
+    base_unit: BaseUnit,
+    on: date,
 ) -> Decimal | None:
     """Median official price per base unit in the weeks before `on`: at this market when
-    it has prices, otherwise across all markets."""
-    query = select(Price.price_per_base_unit).where(
-        Price.product_id == product.id,
-        Price.price_type == price_type,
-        Price.source == PriceSource.OFFICIAL,
-        Price.status == PriceStatus.VALIDATED,
-        Price.observed_on.between(on - REFERENCE_WINDOW, on),
+    it has prices, otherwise across all markets. Only prices in the same base unit count."""
+    query = (
+        select(Price.price_per_base_unit)
+        .join(Unit, Price.unit_id == Unit.id)
+        .where(
+            Unit.base_unit == base_unit,
+            Price.product_id == product.id,
+            Price.price_type == price_type,
+            Price.source == PriceSource.OFFICIAL,
+            Price.status == PriceStatus.VALIDATED,
+            Price.observed_on.between(on - REFERENCE_WINDOW, on),
+        )
     )
     values = list(session.scalars(query.where(Price.market_id == market.id))) or list(
         session.scalars(query)

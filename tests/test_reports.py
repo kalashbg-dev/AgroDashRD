@@ -211,3 +211,28 @@ def test_a_report_reviewed_meanwhile_by_another_admin_is_not_overwritten(
 
     session.expire_all()
     assert session.get(Price, price.id).status is PriceStatus.REJECTED
+
+
+def test_reports_follow_the_latest_unit_of_the_official_series(session, catalog, users):
+    for weeks_later in range(1, 5):
+        session.add(
+            Price(
+                product=catalog["product"],
+                market=catalog["market"],
+                unit=catalog["piece"],
+                observed_on=WEEK + timedelta(weeks=weeks_later),
+                price_type=PriceType.RETAIL,
+                source=PriceSource.OFFICIAL,
+                status=PriceStatus.VALIDATED,
+                amount=Decimal("12"),
+                price_per_base_unit=Decimal("12"),
+            )
+        )
+    session.commit()
+    today = WEEK + timedelta(weeks=4)
+
+    assert report(session, catalog, users[Role.TECNICO], "12", "piece", today).status is (
+        PriceStatus.PENDING
+    )
+    with pytest.raises(ReportError, match="retail prices are per unit"):
+        report(session, catalog, users[Role.TECNICO], "30", "pound", today)

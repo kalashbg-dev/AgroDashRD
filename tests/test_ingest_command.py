@@ -44,11 +44,11 @@ def test_ingest_command_loads_files_and_reports_counts(cli_database, capsys):
 
     out = capsys.readouterr().out.splitlines()
     assert out == [
-        "mayorista.csv: loaded 4 prices, quarantined 6 rows, 1 missing values (run 1)",
+        "mayorista.csv: loaded 5 prices, quarantined 6 rows, 1 missing values (run 1)",
         "mayorista.csv: already loaded (run 1)",
     ]
     with Session(cli_database) as session:
-        assert session.query(Price).count() == 4
+        assert session.query(Price).count() == 5
 
 
 def test_ingest_command_reports_failures_and_keeps_going(cli_database, tmp_path, capsys):
@@ -138,7 +138,7 @@ def test_ingest_command_reports_unreadable_paths_and_keeps_going(cli_database, t
     captured = capsys.readouterr()
     assert exit_code == 1
     assert f"error: {tmp_path.name}: cannot read file" in captured.err
-    assert "mayorista.csv: loaded 4 prices" in captured.out
+    assert "mayorista.csv: loaded 5 prices" in captured.out
 
 
 def test_ingest_drive_needs_configured_ids(cli_database, monkeypatch, capsys):

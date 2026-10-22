@@ -31,6 +31,7 @@ class SeriesCoverage:
     product: str
     market: str
     price_type: str
+    base_unit: str
     first_on: date
     last_on: date
     weeks: int
@@ -155,6 +156,7 @@ def _series(session: Session) -> list[SeriesCoverage]:
             Product.name,
             Market.name,
             Price.price_type,
+            Unit.base_unit,
             func.min(Price.observed_on),
             func.max(Price.observed_on),
             func.count(func.distinct(Price.observed_on)),
@@ -162,12 +164,14 @@ def _series(session: Session) -> list[SeriesCoverage]:
         )
         .join(Product, Price.product_id == Product.id)
         .join(Market, Price.market_id == Market.id)
+        .join(Unit, Price.unit_id == Unit.id)
         .where(Price.source == PriceSource.OFFICIAL)
-        .group_by(Product.name, Market.name, Price.price_type)
-        .order_by(Product.name, Market.name, Price.price_type)
+        # A product sold by the pound and later by the piece has one series per unit.
+        .group_by(Product.name, Market.name, Price.price_type, Unit.base_unit)
+        .order_by(Product.name, Market.name, Price.price_type, Unit.base_unit)
     )
     series = []
-    for product, market, price_type, first_on, last_on, weeks, counted_weeks in rows:
+    for product, market, price_type, base_unit, first_on, last_on, weeks, counted_weeks in rows:
         months = (last_on.year - first_on.year) * 12 + last_on.month - first_on.month + 1
         coverage = counted_weeks / (4 * months)
         series.append(
@@ -175,6 +179,7 @@ def _series(session: Session) -> list[SeriesCoverage]:
                 product=product,
                 market=market,
                 price_type=str(price_type),
+                base_unit=str(base_unit),
                 first_on=first_on,
                 last_on=last_on,
                 weeks=weeks,

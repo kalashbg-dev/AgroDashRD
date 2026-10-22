@@ -11,6 +11,7 @@ from agrodash.ingestion.normalize import (
     parse_amount,
     parse_unit,
     parse_week_date,
+    repair_name,
     same_product_name,
 )
 
@@ -62,7 +63,10 @@ def test_amounts_accept_numbers_and_spanish_or_english_separators(raw, expected)
     assert parse_amount(raw) == expected
 
 
-@pytest.mark.parametrize("raw", ["N/D", "n/d", "", "  ", "-", None, "0", 0])
+@pytest.mark.parametrize(
+    "raw",
+    ["N/D", "n/d", "", "  ", "-", None, "0", 0, ".", "#¡REF!", "#DIV/0!", "#N/A", "#¿NOMBRE?"],
+)
 def test_missing_amounts_are_none(raw):
     assert parse_amount(raw) is None
 
@@ -89,7 +93,8 @@ def test_unreadable_or_negative_amounts_are_invalid(raw):
         ("Ib", BaseUnit.POUND, "1"),
         ("Ciento", BaseUnit.UNIT, "100"),
         ("Huacal/220 Unidad", BaseUnit.UNIT, "220"),
-        ("Saco/180 unid/125/lib", BaseUnit.UNIT, "180"),
+        # Both a count and a weight: the weight is what the price is comparable by.
+        ("Saco/180 unid/125/lib", BaseUnit.POUND, "125"),
         ("Fardo/12 Ud", BaseUnit.UNIT, "12"),
         ("Doc", BaseUnit.UNIT, "12"),
         ("Ud.", BaseUnit.UNIT, "1"),
@@ -172,3 +177,15 @@ def test_typo_level_differences_are_the_same_product(left, right):
 )
 def test_different_grades_sizes_or_words_are_different_products(left, right):
     assert not same_product_name(name_key(left), name_key(right))
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("Aguacate (Semíl-34), primera, peque;o", "Aguacate (Semíl-34), primera, pequeño"),
+        ("Arroz; Cereal", "Arroz; Cereal"),
+        ("Ñame (Liso)", "Ñame (Liso)"),
+    ],
+)
+def test_repair_name_restores_enye_exported_as_semicolon(raw, expected):
+    assert repair_name(raw) == expected

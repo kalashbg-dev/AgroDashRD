@@ -36,8 +36,8 @@ def test_wholesale_csv_loads_prices_and_quarantines_bad_rows(session):
 
     assert (run.status, run.layout) == (IngestionStatus.SUCCEEDED, SourceLayout.WHOLESALE)
     assert (run.rows_read, run.prices_loaded, run.rows_rejected, run.values_missing) == (
-        11,
-        4,
+        12,
+        5,
         6,
         1,
     )
@@ -63,13 +63,15 @@ def test_wholesale_csv_loads_prices_and_quarantines_bad_rows(session):
     )
     assert first_week.ingestion_run_id == run.id
     assert session.query(Price).filter_by(product=rice).count() == 2
+    # The type column says "Mayo+B32868:C32949rista", but the row itself is sound.
+    assert session.query(Product).filter_by(name="Leche (Líquida)").one()
 
 
 def test_quarantined_rows_keep_their_cells_and_line_number(session):
     run = load(session, "mayorista.csv")
 
     unknown = next(row for row in run.quarantined_rows if row.reason == "unknown_unit")
-    assert unknown.row_number == 6
+    assert unknown.row_number == 4
     assert json.loads(unknown.raw_values)[:4] == [
         "Ajo",
         "Legumbres-Hortalizas",
@@ -125,7 +127,7 @@ def test_loading_the_same_file_twice_changes_nothing(session):
 
     assert second.id == first.id
     assert session.query(IngestionRun).count() == 1
-    assert session.query(Price).count() == 4
+    assert session.query(Price).count() == 5
 
 
 def test_the_same_data_in_another_format_only_adds_new_prices(session):
@@ -254,15 +256,12 @@ def test_workbooks_that_unpack_too_large_are_refused(session, monkeypatch):
         load(session, "mayorista.xlsx", content.getvalue())
 
 
-def test_excel_error_cells_are_rejected_not_read_as_prices(session):
+def test_excel_error_cells_are_missing_values_not_prices(session):
     run = load(session, "errores.xls")
 
-    assert (run.prices_loaded, run.rows_rejected) == (1, 1)
-    details = sorted(row.detail for row in run.quarantined_rows)
-    assert details == [
-        "Mercado Nuevo: unreadable price '#REF!'",
-        "Supermercado: unreadable price '#DIV/0!'",
-    ]
+    # #REF! and #DIV/0! plus four blank markets; none is read as a price.
+    assert (run.prices_loaded, run.rows_rejected, run.values_missing) == (1, 0, 6)
+    assert session.query(Price).one().amount == Decimal("20.00")
 
 
 def test_new_products_take_the_most_common_rubro(session):
@@ -275,3 +274,87 @@ def test_new_products_take_the_most_common_rubro(session):
     load(session, "mayorista.csv", "\r\n".join(rows).encode("latin-1"))
 
     assert session.query(Product).one().category == "Lacteos"
+
+
+def wholesale(*rows: str) -> bytes:
+    return "\r\n".join(rows).encode("latin-1")
+
+
+def test_an_isolated_date_typo_takes_the_date_of_its_agreeing_neighbors(session):
+    content = wholesale(
+        "Papa;Raices-Tuberculos;Mayorista;Quintal;1500;Primera;Junio;2018",
+        "Yuca;Raices-Tuberculos;Mayorista;Quintal;1200;3333;Junio;2018",
+        "Batata;Raices-Tuberculos;Mayorista;Quintal;1100;Primera;Junio;2018",
+        "Ñame;Raices-Tuberculos;Mayorista;Quintal;2000;Segunda;Juio;2018",
+        "Ñame;Raices-Tuberculos;Mayorista;Quintal;2100;;;",
+        "Ñame;Raices-Tuberculos;Mayorista;Quintal;2200;Segunda;Junio;2018",
+    )
+
+    run = load(session, "mayorista.csv", content)
+
+    yuca = session.query(Price).join(Product).filter(Product.name == "Yuca").one()
+    assert yuca.observed_on == date(2018, 6, 1)
+    assert run.rows_corrected == 1
+    # A row without any date keeps its error; a typo between different weeks is not guessed.
+    assert reasons(run) == {RejectionReason.INVALID_DATE: 1}
+    names = Counter(price.product.name for price in session.query(Price))
+    assert names == {"Papa": 1, "Yuca": 1, "Batata": 1, "Ñame": 2}
+
+
+def test_a_name_listed_twice_in_one_week_is_a_second_product(session):
+    eggplant = "Berenjena (Pompadur), primera;Legumbres-Hortalizas;Mayorista;Saco/125 lb"
+    content = wholesale(
+        f"{eggplant};1300;Primera;Agosto;2017",
+        f"{eggplant};900;Primera;Agosto;2017",
+        f"{eggplant};1250;Segunda;Agosto;2017",
+        f"{eggplant};950;Segunda;Agosto;2017",
+    )
+
+    run = load(session, "mayorista.csv", content)
+
+    prices = {
+        (price.product.name, price.observed_on.day): price.amount for price in session.query(Price)
+    }
+    assert prices == {
+        ("Berenjena (Pompadur), primera", 1): Decimal("1300.00"),
+        ("Berenjena (Pompadur), primera (fila 2)", 1): Decimal("900.00"),
+        ("Berenjena (Pompadur), primera", 8): Decimal("1250.00"),
+        ("Berenjena (Pompadur), primera (fila 2)", 8): Decimal("950.00"),
+    }
+    assert run.rows_rejected == 0
+
+
+def test_a_lasting_change_of_unit_starts_a_new_series_and_stray_units_are_rejected(session):
+    weeks = ["Primera", "Segunda", "Tercera", "Cuarta"]
+    content = wholesale(
+        *[f"Pepino;Legumbres-Hortalizas;Mayorista;Saco/90 lb;600;{w};Enero;2024" for w in weeks],
+        *[f"Pepino;Legumbres-Hortalizas;Mayorista;Ciento;900;{w};Febrero;2024" for w in weeks],
+        "Pepino;Legumbres-Hortalizas;Mayorista;Litro;50;Primera;Marzo;2024",
+    )
+
+    run = load(session, "mayorista.csv", content)
+
+    bases = Counter(price.unit.base_unit for price in session.query(Price))
+    assert bases == {BaseUnit.POUND: 4, BaseUnit.UNIT: 4}
+    assert reasons(run) == {RejectionReason.UNIT_MISMATCH: 1}
+
+
+def test_names_where_the_source_wrote_a_semicolon_for_enye_are_repaired(session):
+    content = wholesale(
+        '"Aguacate (Semíl-34), primera, peque;o";Frutas;Mayorista ;Ciento;4000;Tercera;Abril;2026'
+    )
+
+    load(session, "mayorista.csv", content)
+
+    assert session.query(Product).one().name == "Aguacate (Semíl-34), primera, pequeño"
+
+
+def test_a_repeat_far_inside_a_mislabeled_block_stays_a_duplicate(session):
+    # Two weeks under one label: every product appears twice, but not side by side.
+    names = ["Papa", "Yuca", "Batata", "Ñame"]
+    week = [f"{name};Raices-Tuberculos;Mayorista;Quintal;1000;Tercera;Mayo;2023" for name in names]
+
+    run = load(session, "mayorista.csv", wholesale(*week, *week))
+
+    assert session.query(Product).count() == 4
+    assert reasons(run) == {RejectionReason.DUPLICATE_PRICE: 4}
