@@ -1,7 +1,7 @@
 """Field price reports: submitted by technicians, flagged against the official series,
 and validated or rejected by an admin before they count."""
 
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta, timezone
 from decimal import Decimal
 from statistics import median
 
@@ -23,6 +23,9 @@ from agrodash.prices.models import (
 # A report more than 50% away from the recent official median is flagged for review.
 OUTLIER_DEVIATION = Decimal("0.5")
 REFERENCE_WINDOW = timedelta(weeks=8)
+# The Dominican Republic is UTC-4 all year (no daylight saving since 1974). A fixed offset
+# avoids depending on the system time zone database, which slim containers lack.
+DOMINICAN_TIME = timezone(timedelta(hours=-4), "AST")
 
 
 class ReportError(ValueError):
@@ -50,7 +53,7 @@ def report_price(
     amount = round_amount(amount)
     if amount <= 0:
         raise ReportError("Price must be greater than zero")
-    if observed_on > date.today():
+    if observed_on > local_today():
         raise ReportError("The observation date cannot be in the future")
     series_unit = _series_base_unit(session, product, price_type)
     if unit.base_unit != series_unit:
@@ -78,6 +81,11 @@ def report_price(
     session.add(price)
     session.commit()
     return price
+
+
+def local_today(now: datetime | None = None) -> date:
+    """Today's date in Santo Domingo, whatever time zone the server runs in."""
+    return (now or datetime.now(UTC)).astimezone(DOMINICAN_TIME).date()
 
 
 def review_report(session: Session, reviewer: User, price_id: int, *, approve: bool) -> Price:

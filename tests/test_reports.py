@@ -1,4 +1,4 @@
-from datetime import date, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -7,7 +7,13 @@ from agrodash.accounts.models import Role
 from agrodash.accounts.service import create_user
 from agrodash.catalog.models import BaseUnit, Market, MarketKind, Product, Unit
 from agrodash.prices.models import Price, PriceSource, PriceStatus, PriceType
-from agrodash.prices.reports import ReportError, pending_reports, report_price, review_report
+from agrodash.prices.reports import (
+    ReportError,
+    local_today,
+    pending_reports,
+    report_price,
+    review_report,
+)
 
 PASSWORD = "correct horse battery"
 WEEK = date(2026, 9, 1)
@@ -236,3 +242,22 @@ def test_reports_follow_the_latest_unit_of_the_official_series(session, catalog,
     )
     with pytest.raises(ReportError, match="retail prices are per unit"):
         report(session, catalog, users[Role.TECNICO], "30", "pound", today)
+
+
+@pytest.mark.parametrize(
+    ("utc", "expected"),
+    [
+        (datetime(2026, 10, 23, 1, 30, tzinfo=UTC), date(2026, 10, 22)),
+        (datetime(2026, 10, 23, 4, 0, tzinfo=UTC), date(2026, 10, 23)),
+    ],
+)
+def test_today_is_the_dominican_date_not_the_server_date(utc, expected):
+    # 21:30 in Santo Domingo is already the next day in UTC.
+    assert local_today(utc) == expected
+
+
+def test_a_report_dated_tomorrow_in_santo_domingo_is_refused(session, catalog, users, monkeypatch):
+    monkeypatch.setattr("agrodash.prices.reports.local_today", lambda: date(2026, 9, 1))
+
+    with pytest.raises(ReportError, match="cannot be in the future"):
+        report(session, catalog, users[Role.TECNICO], observed_on=date(2026, 9, 2))
