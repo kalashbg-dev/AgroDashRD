@@ -231,3 +231,41 @@ def series_coverage(session: Session) -> list[SeriesCoverage]:
             )
         )
     return series
+
+
+@dataclass(frozen=True)
+class QuarantineRow:
+    file_name: str
+    row_number: int
+    reason: str
+    detail: str | None
+    raw_values: str
+
+
+def quarantine(
+    session: Session, reason: str | None = None, limit: int = 200
+) -> list[QuarantineRow]:
+    """Rejected rows of the loads the quality report counts, newest load first."""
+    query = (
+        select(
+            IngestionRun.file_name,
+            QuarantinedRow.row_number,
+            QuarantinedRow.reason,
+            QuarantinedRow.detail,
+            QuarantinedRow.raw_values,
+        )
+        .join(IngestionRun)
+        .where(IngestionRun.status == IngestionStatus.SUCCEEDED, IngestionRun.prices_loaded > 0)
+        .order_by(IngestionRun.id.desc(), QuarantinedRow.row_number)
+        .limit(limit)
+    )
+    if reason:
+        query = query.where(QuarantinedRow.reason == reason)
+    return [
+        QuarantineRow(file_name, row_number, str(row_reason), detail, raw_values)
+        for file_name, row_number, row_reason, detail, raw_values in session.execute(query)
+    ]
+
+
+def recent_runs(session: Session, limit: int = 10) -> list[IngestionRun]:
+    return list(session.scalars(select(IngestionRun).order_by(IngestionRun.id.desc()).limit(limit)))

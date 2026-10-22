@@ -123,3 +123,60 @@ def _verify(password_hash: str, password: str) -> bool:
 @lru_cache
 def _dummy_hash() -> str:
     return _hasher.hash("timing-equalizer")
+
+
+# Who an account may create, deactivate or unlock. Nobody manages accounts above them.
+_MANAGEABLE = {
+    Role.TECNICO: [],
+    Role.ADMIN: [Role.TECNICO],
+    Role.SUPERADMIN: [Role.TECNICO, Role.ADMIN, Role.SUPERADMIN],
+}
+_RANK = {Role.SUPERADMIN: 0, Role.ADMIN: 1, Role.TECNICO: 2}
+
+
+def manageable_roles(role: Role) -> list[Role]:
+    return list(_MANAGEABLE[role])
+
+
+def list_users(session: Session) -> list[User]:
+    """Every account, highest role first, then by email."""
+    return sorted(session.scalars(select(User)), key=lambda user: (_RANK[user.role], user.email))
+
+
+def create_account(
+    session: Session,
+    actor: User,
+    email: str,
+    password: str,
+    role: Role,
+    full_name: str | None = None,
+) -> User:
+    if role not in manageable_roles(actor.role):
+        raise AccountError(f"You cannot create {role} accounts")
+    return create_user(session, email, password, role, full_name)
+
+
+def set_active(session: Session, actor: User, user_id: int, *, active: bool) -> User:
+    user = _managed(session, actor, user_id)
+    if user.id == actor.id and not active:
+        raise AccountError("You cannot deactivate your own account")
+    user.is_active = active
+    session.commit()
+    return user
+
+
+def unlock(session: Session, actor: User, user_id: int) -> User:
+    user = _managed(session, actor, user_id)
+    user.locked_until = None
+    user.failed_login_attempts = 0
+    session.commit()
+    return user
+
+
+def _managed(session: Session, actor: User, user_id: int) -> User:
+    user = session.get(User, user_id)
+    if user is None:
+        raise AccountError("Unknown account")
+    if user.role not in manageable_roles(actor.role):
+        raise AccountError(f"You cannot manage {user.role} accounts")
+    return user

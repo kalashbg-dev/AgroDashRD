@@ -227,3 +227,16 @@ def test_inactive_products_and_markets_are_never_ready_to_forecast(session, monk
     session.query(Market).one().is_active = False
     session.commit()
     assert not any(series.ready for series in build_report(session).series)
+
+
+def test_quarantine_lists_rejected_rows_and_filters_by_reason(session):
+    ingest_file(session, (FIXTURES / "mayorista.csv").read_bytes(), "m.csv", IngestionTrigger.FILE)
+
+    every = quality.quarantine(session)
+    units = quality.quarantine(session, reason="unknown_unit")
+
+    assert len(every) == 6
+    assert [(row.file_name, row.row_number, row.reason) for row in units] == [
+        ("m.csv", 4, "unknown_unit")
+    ]
+    assert [run.file_name for run in quality.recent_runs(session)] == ["m.csv"]

@@ -37,7 +37,7 @@ Assumption: the wholesale CSV belongs to "Mercado Nuevo" (legacy assumption) unt
 | T5b | S6 | inline | done (8b474f9) | Streamlit app shell: navigation, login and logout with lockout, role-gated pages, mobile-first layout |
 | T5c | S6 | inline | done (5bde761) | public pages: Precios (latest prices, history chart) and Pronóstico (forecast with ranges, "sin pronóstico") |
 | T5d | S6 | inline | done | Reportar precio (TECNICO and up) |
-| T5e | S6 | inline | pending | Admin: upload and ingest, quarantine, validate field reports, users |
+| T5e | S6 | inline | done | Admin: upload and ingest, quarantine, validate field reports, users |
 | T5f | S6 | inline | pending | Admin catalog: review aliases, rename and merge products (rename candidates, "(fila 2)"), activate or deactivate products and markets |
 | T6 | S7 | inline | pending | |
 

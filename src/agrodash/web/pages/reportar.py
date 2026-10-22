@@ -6,6 +6,7 @@ import streamlit as st
 from agrodash.accounts.models import User
 from agrodash.prices.queries import active_markets, reports_by, units_for_report
 from agrodash.prices.reports import ReportError, local_today, report_price
+from agrodash.web.messages import spanish
 from agrodash.web.state import current_user, database, require
 from agrodash.web.ui import choose_product
 
@@ -48,7 +49,7 @@ if st.button("Enviar reporte", type="primary", key="report_submit"):
                     price_type=price_type,
                 )
             except ReportError as error:
-                st.error(str(error))
+                st.error(spanish(str(error)))
             else:
                 if price.is_outlier:
                     st.warning(
