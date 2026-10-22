@@ -76,6 +76,9 @@ def benchmark(
     from statsforecast import StatsForecast
     from statsforecast.models import AutoETS, AutoTheta, Naive
 
+    unknown = set(models) - {"AutoETS", "Theta", "GBM"}
+    if unknown:
+        raise ValueError(f"Unknown benchmark model {sorted(unknown)[0]!r}")
     scale = frame.groupby("unique_id")["y"].apply(lambda y: y.diff().abs().mean())
     frame = frame[frame["unique_id"].isin(scale[scale > 0].index)]
     if frame.empty:
@@ -98,8 +101,11 @@ def benchmark(
                 lags=GBM_LAGS,
                 target_transforms=[Differences([1])],
             ).cross_validation(df=frame, h=horizon, n_windows=windows, step_size=horizon)
+            # Left join: a series the GBM step drops would otherwise lose its other scores.
             results = results.merge(
-                gbm[["unique_id", "ds", "cutoff", "GBM"]], on=["unique_id", "ds", "cutoff"]
+                gbm[["unique_id", "ds", "cutoff", "GBM"]],
+                on=["unique_id", "ds", "cutoff"],
+                how="left",
             )
     names = [SELECTED_MODEL, *models]
     errors = {

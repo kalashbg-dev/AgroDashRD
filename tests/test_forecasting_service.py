@@ -182,3 +182,19 @@ def test_failure_messages_keep_only_the_first_line(session, ready_series, monkey
 
     assert str(raised.value) == "RuntimeError: database refused the insert"
     assert session.query(ForecastRun).one().error == "RuntimeError: database refused the insert"
+
+
+def test_a_failing_benchmark_keeps_the_forecasts_and_notes_the_error(
+    session, ready_series, monkeypatch
+):
+    def broken(*_, **__):
+        raise RuntimeError("numba crashed")
+
+    monkeypatch.setattr(service, "benchmark", broken)
+
+    run = run_forecasts(session)
+
+    assert run.status is ForecastStatus.SUCCEEDED
+    assert run.error == "Benchmark failed: RuntimeError: numba crashed"
+    assert session.query(Forecast).count() == 4
+    assert session.query(ForecastEvaluation).count() == 0

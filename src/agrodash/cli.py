@@ -221,6 +221,13 @@ def _quality_report(args: argparse.Namespace) -> int:
 
 def _forecast(args: argparse.Namespace) -> int:
     engine = create_db_engine(get_settings().database_url)
+    try:
+        return _report_forecast(engine, args)
+    finally:
+        engine.dispose()
+
+
+def _report_forecast(engine, args: argparse.Namespace) -> int:
     with Session(engine) as session:
         try:
             run = run_forecasts(session, run_benchmark=not args.skip_benchmark)
@@ -236,7 +243,8 @@ def _forecast(args: argparse.Namespace) -> int:
         if medians:
             listed = ", ".join(f"{model} {mase:.2f}" for model, mase in medians)
             print(f"Benchmark median MASE (below 1 beats the series' one-step naive): {listed}")
-    engine.dispose()
+        if run.error:
+            print(f"warning: {run.error}", file=sys.stderr)
     return 0
 
 

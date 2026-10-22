@@ -90,3 +90,8 @@ def test_a_gap_before_the_target_widens_the_range_like_a_longer_horizon():
         near.loc[4, "lo_95"],
         near.loc[4, "hi_95"],
     )
+
+
+def test_unknown_benchmark_models_are_refused():
+    with pytest.raises(ValueError, match="Unknown benchmark model 'Prophet'"):
+        benchmark(frame({"a": list(np.linspace(1, 50, 120))}), models=("Prophet",))

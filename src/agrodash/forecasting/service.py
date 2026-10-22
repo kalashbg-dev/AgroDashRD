@@ -91,7 +91,16 @@ def _forecast(
         )
     if not run_benchmark:
         return
-    for row in benchmark(data.frame).itertuples():
+    try:
+        scores = benchmark(data.frame)
+    except Exception as error:
+        # The benchmark only monitors the alternatives; it must not cost the forecasts.
+        lines = str(error).splitlines()
+        run.error = f"Benchmark failed: {error.__class__.__name__}: {lines[0] if lines else ''}"[
+            :500
+        ]
+        return
+    for row in scores.itertuples():
         session.add(
             ForecastEvaluation(
                 run=run,
