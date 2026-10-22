@@ -1,3 +1,5 @@
+> **Documento histórico.** Describe el sistema anterior (FastAPI, Flutter, Streamlit original), que fue reemplazado por el paquete `src/agrodash`. Se conserva como registro; para el estado actual ver [README.md](README.md).
+
 # Informe de Auditoría Técnica - AgroDashRD
 
 ## 1. Resumen Ejecutivo

@@ -23,7 +23,6 @@ htmlcov/
 # Local data and databases (raw datasets come from Google Drive).
 # Small hand-made test fixtures are the only tracked data files.
 /data/
-/legacy/data/
 *.csv
 *.xls
 *.xlsx

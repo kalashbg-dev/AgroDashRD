@@ -21,7 +21,7 @@ src/agrodash/
   web/          Streamlit pages (presentation only)
 ```
 
-The migration runs in phases (F0 to F6); progress is tracked in [odd/tasks/agrodash-python-platform.md](odd/tasks/agrodash-python-platform.md). The FastAPI backend and the empty Flutter app were removed; `legacy/` (original Streamlit app) stays for reference until the new web app reaches parity.
+The migration runs in phases (F0 to F6); progress is tracked in [odd/tasks/agrodash-python-platform.md](odd/tasks/agrodash-python-platform.md). The FastAPI backend, the empty Flutter app and the original Streamlit app (`legacy/`) were removed; the old app can still be read in git history (`git show 75c584b:legacy/app.py`).
 
 ## Features
 
