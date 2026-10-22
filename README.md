@@ -4,16 +4,24 @@
 
 ## What is AgroDashRD?
 
-AgroDashRD is a comprehensive platform for visualizing and analyzing agricultural sector data in the Dominican Republic. Originally a monolithic dashboard, it has evolved into a modern architecture with a dedicated **Backend API** and a **Mobile App**.
+AgroDashRD is a comprehensive platform for visualizing and analyzing agricultural sector data in the Dominican Republic. It is being rebuilt as a single Python application: a mobile-first **Streamlit** web app on top of a clean data pipeline and validated price forecasts.
 
 ## Architecture
 
-The project is divided into two main components:
+One Python package, `src/agrodash`, organized by feature. Business logic does not depend on the UI, so the Streamlit layer can be replaced later without touching it.
 
-1.  **Backend (`backend/`)**: A robust REST API built with **FastAPI** (Python), using **PostgreSQL** for data storage and **SQLAlchemy** for ORM. It handles authentication, data management, and ML predictions.
-2.  **Mobile App (`mobile_app/`)**: A cross-platform mobile application built with **Flutter**, designed for farmers and professionals to access data on the go.
+```
+src/agrodash/
+  catalog/      products, name aliases, units, markets
+  prices/       prices, field reports and validation
+  ingestion/    Google Drive and upload sources, parsers, normalizers, quarantine
+  forecasting/  backtesting, models, batch job, stored predictions
+  accounts/     users, roles, password hashing, login lockout
+  infra/        settings, database, migrations
+  web/          Streamlit pages (presentation only)
+```
 
-> **Note:** The original Dash/Streamlit application is preserved in the `legacy/` directory for reference.
+The migration runs in phases (F0 to F6); progress is tracked in [odd/tasks/agrodash-python-platform.md](odd/tasks/agrodash-python-platform.md). Until it finishes, `backend/` (FastAPI) and `legacy/` (original Streamlit app) remain for reference and are removed once their logic is ported.
 
 ## Features
 
@@ -30,67 +38,35 @@ The project is divided into two main components:
 ## Getting Started
 
 ### Prerequisites
-- Python 3.12+
-- Flutter SDK
-- Docker & Docker Compose (Recommended)
+- [uv](https://docs.astral.sh/uv/) (installs Python 3.12 automatically)
+- Docker & Docker Compose (optional, for PostgreSQL)
 
-### Quick Start (Development)
-
-The easiest way to start the backend is using the provided script:
+### Development
 
 ```bash
-./start_dev.sh
+uv sync                 # create .venv and install dependencies
+cp .env.example .env    # adjust settings if needed
+uv run alembic upgrade head   # create or upgrade the database schema
+uv run pytest           # run the test suite
+uv run ruff check .     # lint
+uv run ruff format .    # format
 ```
 
-This will check for dependencies and launch the backend (using Docker if available, or local Python otherwise).
+### Configuration
 
-### Manual Setup
+Settings are read from `AGRODASH_*` environment variables or `.env` (see [.env.example](.env.example)):
 
-#### Backend
-See [backend/README.md](backend/README.md) for detailed instructions.
+| Variable | Default | Notes |
+|---|---|---|
+| `AGRODASH_ENV` | `development` | `development` or `production` |
+| `AGRODASH_DATABASE_URL` | `sqlite:///agrodash.db` | Production refuses to start on SQLite |
 
-1.  Create a virtual environment and install dependencies:
-    ```bash
-    cd backend
-    python -m venv venv
-    source venv/bin/activate
-    pip install -r requirements.txt
-    ```
-2.  Run the server:
-    ```bash
-    uvicorn backend.app.main:app --reload
-    ```
-    API Docs: http://localhost:8000/docs
-
-#### Mobile App
-See `mobile_app/` for the Flutter project.
-
-1.  Navigate to the directory:
-    ```bash
-    cd mobile_app
-    ```
-2.  Install dependencies:
-    ```bash
-    flutter pub get
-    ```
-3.  Run the app:
-    ```bash
-    flutter run
-    ```
-    *Note: Ensure the backend is running first.*
+Schema changes go through Alembic migrations in `src/agrodash/infra/migrations`: after editing a model, run `uv run alembic revision --autogenerate -m "<change>"` and review the generated file. Tests run every schema test on SQLite, and also on PostgreSQL when `AGRODASH_TEST_POSTGRES_URL` is set (CI does this).
 
 ## Documentation
 
-- **[CONFIGURACION_PENDIENTE.md](CONFIGURACION_PENDIENTE.md)**: Detailed configuration guide and pending tasks.
-- **[GUIA_DESPLIEGUE.md](GUIA_DESPLIEGUE.md)**: Deployment instructions.
 - **[INFORME_AUDITORIA.md](INFORME_AUDITORIA.md)**: Audit report.
-
-## Data
-
-Data is stored in PostgreSQL (or SQLite for local dev). Initial seed data can be loaded via:
-```bash
-python backend/scripts/seed_data.py
-```
+- Deployment and configuration guides are rewritten in phase F6; the current ones still describe the FastAPI + Flutter design.
 
 ## Support
 
