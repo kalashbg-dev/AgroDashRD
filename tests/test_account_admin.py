@@ -61,7 +61,7 @@ def test_deactivating_and_reactivating_an_account(session, people):
     [
         (Role.ADMIN, Role.ADMIN, "cannot manage ADMIN accounts"),
         (Role.ADMIN, Role.SUPERADMIN, "cannot manage SUPERADMIN accounts"),
-        (Role.TECNICO, Role.TECNICO, "cannot manage TECNICO accounts"),
+        (Role.TECNICO, Role.TECNICO, "Your account cannot manage accounts"),
     ],
 )
 def test_nobody_manages_accounts_above_their_reach(session, people, actor, target, message):
@@ -92,3 +92,29 @@ def test_users_are_listed_by_role_then_email(session, people):
         Role.ADMIN,
         Role.TECNICO,
     ]
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        lambda s, p: create_account(s, p[Role.ADMIN], "nuevo@example.com", PASSWORD, Role.TECNICO),
+        lambda s, p: set_active(s, p[Role.ADMIN], p[Role.TECNICO].id, active=False),
+        lambda s, p: unlock(s, p[Role.ADMIN], p[Role.TECNICO].id),
+    ],
+)
+def test_a_deactivated_admin_can_no_longer_manage_accounts(session, people, action):
+    people[Role.ADMIN].is_active = False
+    session.commit()
+
+    with pytest.raises(AccountError, match="Your account cannot manage accounts"):
+        action(session, people)
+    assert session.get(User, people[Role.TECNICO].id).is_active is True
+
+
+def test_a_deactivated_superadmin_cannot_reactivate_itself(session, people):
+    superadmin = people[Role.SUPERADMIN]
+    superadmin.is_active = False
+    session.commit()
+
+    with pytest.raises(AccountError, match="Your account cannot manage accounts"):
+        set_active(session, superadmin, superadmin.id, active=True)

@@ -13,6 +13,7 @@ _EXACT = {
     "Your account cannot report prices": "Tu cuenta no puede reportar precios.",
     "Your account cannot review reports": "Tu cuenta no puede revisar reportes.",
     "Your account cannot change the catalog": "Tu cuenta no puede cambiar el catálogo.",
+    "Your account cannot manage accounts": "Tu cuenta no puede gestionar cuentas.",
     "A product cannot be merged into itself": "Un producto no se puede fusionar consigo mismo.",
     "The name cannot be empty": "El nombre no puede estar vacío.",
 }

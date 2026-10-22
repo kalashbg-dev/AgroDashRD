@@ -3,6 +3,7 @@
 from sqlalchemy.orm import Session
 
 from agrodash.accounts.models import User
+from agrodash.accounts.service import can_manage
 from agrodash.ingestion.models import IngestionTrigger
 from agrodash.ingestion.service import IngestionError, ingest_file, loaded_run
 
@@ -20,10 +21,13 @@ def load_report(
     session: Session, file_name: str, content: bytes, trigger: IngestionTrigger, actor_id: int
 ) -> tuple[str, str]:
     """Load a report file and describe the result as (kind, message) for st.<kind>."""
+    actor = session.get(User, actor_id)
+    if actor is None or not (actor.is_active and can_manage(actor.role)):
+        return "error", "Tu cuenta no puede cargar datos."
     if loaded_run(session, content):
         return "info", f"{file_name} ya estaba cargado."
     try:
-        run = ingest_file(session, content, file_name, trigger, session.get(User, actor_id))
+        run = ingest_file(session, content, file_name, trigger, actor)
     except IngestionError as error:
         return "error", f"{file_name}: no se pudo cargar ({error})."
     return (

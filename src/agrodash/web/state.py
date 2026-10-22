@@ -12,7 +12,7 @@ import streamlit as st
 from sqlalchemy import Engine
 from sqlalchemy.orm import Session
 
-from agrodash.accounts.models import Role
+from agrodash.accounts.models import Role, User
 from agrodash.accounts.service import AuthenticationError, authenticate
 from agrodash.infra.db import create_db_engine
 from agrodash.infra.settings import get_settings
@@ -60,8 +60,28 @@ def sign_out() -> None:
     st.session_state.pop("user", None)
 
 
+def refresh_user() -> dict | None:
+    """Re-read the signed-in account: the session keeps what was true at sign-in.
+
+    A deactivated or deleted account is signed out; a changed role takes effect now.
+    """
+    user = current_user()
+    if not user:
+        return None
+    with database() as session:
+        account = session.get(User, user["id"])
+        if account is None or not account.is_active:
+            sign_out()
+            return None
+        if str(account.role) != user["role"]:
+            user = {**user, "role": str(account.role)}
+            st.session_state["user"] = user
+    return user
+
+
 def require(page: str) -> None:
-    """Stop rendering unless the current user may open `page`."""
+    """Stop rendering unless the current account, as it is now, may open `page`."""
+    refresh_user()
     if not can_open(current_role(), page):
         st.error("No tienes permiso para ver esta página.")
         st.stop()

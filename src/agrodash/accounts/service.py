@@ -151,6 +151,7 @@ def create_account(
     role: Role,
     full_name: str | None = None,
 ) -> User:
+    _check_manager(actor)
     if role not in manageable_roles(actor.role):
         raise AccountError(f"You cannot create {role} accounts")
     return create_user(session, email, password, role, full_name)
@@ -173,7 +174,14 @@ def unlock(session: Session, actor: User, user_id: int) -> User:
     return user
 
 
+def _check_manager(actor: User) -> None:
+    # A deactivated admin may still have a page open; refuse it here, not only on pages.
+    if not (actor.is_active and can_manage(actor.role)):
+        raise AccountError("Your account cannot manage accounts")
+
+
 def _managed(session: Session, actor: User, user_id: int) -> User:
+    _check_manager(actor)
     user = session.get(User, user_id)
     if user is None:
         raise AccountError("Unknown account")

@@ -135,3 +135,43 @@ def test_loading_a_report_describes_the_result(setup):
     assert broken[0] == "error" and broken[1].startswith("precios.pdf: no se pudo cargar")
     with Session(setup["engine"]) as session:
         assert session.query(Price).filter_by(source=PriceSource.OFFICIAL).count() == 5
+
+
+def test_an_admin_deactivated_mid_session_loses_the_page_and_the_session(setup):
+    with Session(setup["engine"]) as session:
+        session.get(User, setup["admin"]["id"]).is_active = False
+        session.commit()
+
+    page = open_page(setup["admin"])
+
+    assert [error.value for error in page.error] == ["No tienes permiso para ver esta página."]
+    assert "user" not in page.session_state
+    assert not page.button
+
+
+def test_a_demoted_account_gets_the_pages_of_its_current_role(setup):
+    with Session(setup["engine"]) as session:
+        session.get(User, setup["admin"]["id"]).role = Role.TECNICO
+        session.commit()
+
+    page = open_page(setup["admin"])
+
+    assert [error.value for error in page.error] == ["No tienes permiso para ver esta página."]
+    assert page.session_state["user"]["role"] == "TECNICO"
+
+
+def test_loading_data_refuses_a_deactivated_admin(setup):
+    with Session(setup["engine"]) as session:
+        session.get(User, setup["admin"]["id"]).is_active = False
+        session.commit()
+        result = load_report(
+            session,
+            "mayorista.csv",
+            (FIXTURES / "mayorista.csv").read_bytes(),
+            IngestionTrigger.UPLOAD,
+            setup["admin"]["id"],
+        )
+
+    assert result == ("error", "Tu cuenta no puede cargar datos.")
+    with Session(setup["engine"]) as session:
+        assert session.query(Price).filter_by(source=PriceSource.OFFICIAL).count() == 0
