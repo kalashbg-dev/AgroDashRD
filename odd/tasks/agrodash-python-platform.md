@@ -29,7 +29,10 @@ Assumption: the wholesale CSV belongs to "Mercado Nuevo" (legacy assumption) unt
 | T3e | S4 | inline | done (718a54a, follow-up fixes) | data-quality report (`agrodash quality-report`), full history load evidence, docs |
 | T3f | S4 | inline | done (f410bcd, 1ef7e5c, 483f58c, follow-up) | rejected-rows audit fixes (L13-L16) |
 | T3g | S4 | inline | done | week semantics, range units, name-less rows (L17-L18) |
-| T4 | S5 | inline | pending | |
+| T4a | S5 | inline | pending | series builder: report-period calendar, ready series, gap interpolation, future period slots |
+| T4b | S5 | inline | pending | backtest and per-series model selection (MASE), fit and predict with intervals |
+| T4c | S5 | inline | pending | schema: forecast_runs, series evaluations, forecasts (migration, own commit) |
+| T4d | S5 | inline | pending | `agrodash forecast` batch job storing results; series without forecast listed as "sin pronóstico"; docs |
 | T5 | S6 | inline | pending | |
 | T6 | S7 | inline | pending | |
 
@@ -69,4 +72,5 @@ Route evidence: phases depend on each other (no independent parallel units), so 
   - A row with neither name nor price counts as a missing value; a row with prices but no name is rejected.
   - Real data: 290,162 prices, 54 units, 475 series ready.
 - L19 (T3g review): review of f8b1e89..008be14 approved and acknowledged. The short-row guard and the empty-name rule are pinned by tests in 5b3d902; removing the guard makes the test fail with IndexError. Deployment note for F6: any database loaded before 008be14 keeps the old upper-bound factors for weight-range units, because unit aliases are cached by raw text. Build production from an empty database with `alembic upgrade head` and `agrodash ingest --drive`. Only scratch databases exist today. 258 passed.
+- L20 (2026-10-22, T4 plan): F2 and F3 are merged into main (PRs #4-#7); F4 branch feat/f4-forecasting starts from main 75c584b. LightGBM was dropped: on macOS it needs the system library libomp (dlopen failed). The global model is scikit-learn's HistGradientBoostingRegressor through mlforecast: the same histogram gradient-boosting family, with no system dependency. The real data has 492 published report periods over about 9 years (about 54 a year, because of fifth weeks), so the yearly season is 54 periods. A backtest of Naive, SeasonalNaive(54), AutoETS, AutoTheta(54), AutoARIMA and the GBM was started on the 475 ready series (h=4, 6 windows, MASE scaled by the in-sample one-step naive).
 - L3: plan approved; data-quality gate added to S4/S5. Engram mirror pending: `mem_current_project` is ambiguous from `~/Downloads` (agrodashrd vs another repo).

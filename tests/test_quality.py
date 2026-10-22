@@ -121,6 +121,8 @@ def test_quality_report_command_prints_the_summary_and_exports_series(
     rows = list(csv.DictReader(export.open(encoding="utf-8")))
     assert len(rows) == 17
     assert set(rows[0]) == {
+        "product_id",
+        "market_id",
         "product",
         "market",
         "price_type",

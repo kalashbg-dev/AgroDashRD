@@ -28,6 +28,8 @@ LAST_COUNTED_DAY = 22
 
 @dataclass(frozen=True)
 class SeriesCoverage:
+    product_id: int
+    market_id: int
     product: str
     market: str
     price_type: str
@@ -86,7 +88,7 @@ def build_report(session: Session) -> QualityReport:
         ],
         units=session.scalar(select(func.count(Unit.id))),
         latest_observation=latest,
-        series=_series(session),
+        series=series_coverage(session),
         rename_candidates=_rename_candidates(session),
     )
 
@@ -141,7 +143,8 @@ def _similarity(left: str, right: str) -> float:
     return len(left_words & right_words) / len(left_words | right_words)
 
 
-def _series(session: Session) -> list[SeriesCoverage]:
+def series_coverage(session: Session) -> list[SeriesCoverage]:
+    """Every official series (product, market, price type, base unit) and its coverage."""
     # Wholesale and retail reports may end on different dates; compare within each type.
     latest_by_type = dict(
         session.execute(
@@ -153,6 +156,8 @@ def _series(session: Session) -> list[SeriesCoverage]:
     counted = extract("day", Price.observed_on) <= LAST_COUNTED_DAY
     rows = session.execute(
         select(
+            Product.id,
+            Market.id,
             Product.name,
             Market.name,
             Price.price_type,
@@ -167,15 +172,30 @@ def _series(session: Session) -> list[SeriesCoverage]:
         .join(Unit, Price.unit_id == Unit.id)
         .where(Price.source == PriceSource.OFFICIAL)
         # A product sold by the pound and later by the piece has one series per unit.
-        .group_by(Product.name, Market.name, Price.price_type, Unit.base_unit)
+        .group_by(
+            Product.id, Market.id, Product.name, Market.name, Price.price_type, Unit.base_unit
+        )
         .order_by(Product.name, Market.name, Price.price_type, Unit.base_unit)
     )
     series = []
-    for product, market, price_type, base_unit, first_on, last_on, weeks, counted_weeks in rows:
+    for (
+        product_id,
+        market_id,
+        product,
+        market,
+        price_type,
+        base_unit,
+        first_on,
+        last_on,
+        weeks,
+        counted_weeks,
+    ) in rows:
         months = (last_on.year - first_on.year) * 12 + last_on.month - first_on.month + 1
         coverage = counted_weeks / (4 * months)
         series.append(
             SeriesCoverage(
+                product_id=product_id,
+                market_id=market_id,
                 product=product,
                 market=market,
                 price_type=str(price_type),
