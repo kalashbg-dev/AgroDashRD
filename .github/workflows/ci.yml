@@ -15,8 +15,10 @@ jobs:
         image: postgres:16-alpine
         env:
           POSTGRES_USER: agrodash
-          POSTGRES_PASSWORD: agrodash
           POSTGRES_DB: agrodash_test
+          # Throwaway database inside the CI runner: no password at all, so nothing
+          # credential-like is committed.
+          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-
@@ -37,6 +39,5 @@ jobs:
         run: uv run ruff format --check .
       - name: Test
         env:
-          # Disposable CI-only database, not a secret.
-          AGRODASH_TEST_POSTGRES_URL: postgresql+psycopg://agrodash:agrodash@localhost:5432/agrodash_test
+          AGRODASH_TEST_POSTGRES_URL: postgresql+psycopg://agrodash@localhost:5432/agrodash_test
         run: uv run pytest
