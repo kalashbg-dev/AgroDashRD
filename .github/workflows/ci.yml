@@ -10,6 +10,22 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: agrodash
+          POSTGRES_DB: agrodash_test
+          # Throwaway database inside the CI runner: no password at all, so nothing
+          # credential-like is committed.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U agrodash"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
@@ -22,4 +38,6 @@ jobs:
       - name: Format
         run: uv run ruff format --check .
       - name: Test
+        env:
+          AGRODASH_TEST_POSTGRES_URL: postgresql+psycopg://agrodash@localhost:5432/agrodash_test
         run: uv run pytest

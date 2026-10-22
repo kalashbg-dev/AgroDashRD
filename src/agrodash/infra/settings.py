@@ -17,9 +17,11 @@ class Settings(BaseSettings):
     @classmethod
     def _normalize_database_url(cls, value: str) -> str:
         value = value.strip()
-        # Some hosts inject the short alias, which SQLAlchemy 2 no longer accepts.
-        if value.startswith("postgres://"):
-            value = "postgresql://" + value.removeprefix("postgres://")
+        # Hosts often inject "postgres://" (rejected by SQLAlchemy 2) or a driverless
+        # "postgresql://" (which would load psycopg2); pin the installed psycopg 3 driver.
+        for prefix in ("postgres://", "postgresql://"):
+            if value.startswith(prefix):
+                return "postgresql+psycopg://" + value.removeprefix(prefix)
         return value
 
     @model_validator(mode="after")
