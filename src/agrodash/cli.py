@@ -1,6 +1,7 @@
 import argparse
 import csv
 import getpass
+import os
 import statistics
 import sys
 from dataclasses import asdict
@@ -60,7 +61,13 @@ def main(argv: list[str] | None = None) -> int:
         help="do not re-measure the other models against the last price (much faster)",
     )
 
+    web_help = "start the web app (Streamlit)"
+    web = commands.add_parser("web", help=web_help, description=_sentence(web_help))
+    web.add_argument("--port", type=int, default=8501, help="port to listen on (default 8501)")
+
     args = parser.parse_args(argv)
+    if args.command == "web":
+        return _web(args)
     if args.command == "ingest" and not (args.files or args.drive):
         ingest.error("give files to load or --drive")
     try:
@@ -216,6 +223,26 @@ def _quality_report(args: argparse.Namespace) -> int:
             print(f"error: cannot write {args.series_csv}: {error.strerror}", file=sys.stderr)
             return 1
         print(f"Wrote {len(report.series)} series to {args.series_csv}")
+    return 0
+
+
+def _web(args: argparse.Namespace) -> int:
+    app = Path(__file__).parent / "web" / "app.py"
+    # Replace this process with Streamlit's, so signals and exit codes pass straight through.
+    os.execv(  # noqa: S606
+        sys.executable,
+        [
+            sys.executable,
+            "-m",
+            "streamlit",
+            "run",
+            str(app),
+            "--server.port",
+            str(args.port),
+            "--server.headless",
+            "true",
+        ],
+    )
     return 0
 
 
