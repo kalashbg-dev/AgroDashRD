@@ -124,3 +124,13 @@ def test_products_and_markets_can_be_retired_and_restored(session, catalog):
 def test_only_managers_change_the_catalog(session, catalog, action):
     with pytest.raises(CatalogError, match="cannot change the catalog"):
         action(session, catalog)
+
+
+def test_a_product_cannot_be_merged_into_a_retired_one(session, catalog):
+    catalog["new"].is_active = False
+    session.commit()
+
+    with pytest.raises(CatalogError, match="Cannot merge into a retired product"):
+        merge_products(session, catalog["admin"], catalog["old"].id, catalog["new"].id)
+
+    assert session.query(Price).filter_by(product_id=catalog["old"].id).count() == 1

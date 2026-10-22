@@ -73,7 +73,7 @@ with load_tab:
                 }
             ),
             hide_index=True,
-            use_container_width=True,
+            width="stretch",
         )
 
 with reports_tab:
@@ -101,9 +101,9 @@ with reports_tab:
                 st.warning("Lejos del precio oficial reciente.")
             approve, reject = st.columns(2)
             decision = None
-            if approve.button("Validar", key=f"approve_{report_id}", use_container_width=True):
+            if approve.button("Validar", key=f"approve_{report_id}", width="stretch"):
                 decision = True
-            if reject.button("Rechazar", key=f"reject_{report_id}", use_container_width=True):
+            if reject.button("Rechazar", key=f"reject_{report_id}", width="stretch"):
                 decision = False
             if decision is not None:
                 with database() as session:
@@ -133,7 +133,7 @@ with quarantine_tab:
             }
         ),
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
         key="quarantine_table",
     )
     st.caption(
@@ -165,7 +165,7 @@ with users_tab:
             }
         ),
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
     )
     st.subheader("Nueva cuenta")
     email = st.text_input("Correo", key="new_email")
@@ -192,7 +192,7 @@ with users_tab:
                 if toggle.button(
                     "Desactivar" if chosen[4] else "Activar",
                     key="manage_toggle",
-                    use_container_width=True,
+                    width="stretch",
                 ):
                     set_active(
                         session, session.get(User, actor_id), chosen[0], active=not chosen[4]
@@ -202,7 +202,7 @@ with users_tab:
                     "Desbloquear",
                     key="manage_unlock",
                     disabled=not chosen[5],
-                    use_container_width=True,
+                    width="stretch",
                 ):
                     unlock(session, session.get(User, actor_id), chosen[0])
                     st.rerun()

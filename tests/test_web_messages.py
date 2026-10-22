@@ -22,3 +22,9 @@ from agrodash.web.messages import spanish
 )
 def test_domain_messages_are_shown_in_spanish(message, expected):
     assert spanish(message) == expected
+
+
+def test_merging_into_a_retired_product_is_explained_in_spanish():
+    assert spanish("Cannot merge into a retired product") == (
+        "No se puede unir con un producto retirado. Reactívalo primero."
+    )

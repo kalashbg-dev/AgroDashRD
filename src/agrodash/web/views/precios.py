@@ -34,7 +34,7 @@ st.dataframe(
         }
     ),
     hide_index=True,
-    use_container_width=True,
+    width="stretch",
 )
 
 st.subheader("Historia")
@@ -55,5 +55,5 @@ points = history(
 )
 frame = pd.DataFrame([vars(point) for point in points])
 colors = market_colors({row.market: row.market_id for row in latest}, theme())
-st.altair_chart(history_chart(frame, colors, theme(), UNIT_NAMES[unit]), use_container_width=True)
+st.altair_chart(history_chart(frame, colors, theme(), UNIT_NAMES[unit]), width="stretch")
 st.caption("Precios oficiales validados de los dos últimos años, por semana de reporte.")

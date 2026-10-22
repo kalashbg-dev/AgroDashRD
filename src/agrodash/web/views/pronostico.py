@@ -70,9 +70,7 @@ future = pd.DataFrame(
 )
 if not past_frame.empty:
     color = PALETTE[theme()][steps[0].market_id % len(PALETTE[theme()])]
-    st.altair_chart(
-        forecast_chart(past_frame, future, color, theme(), unit), use_container_width=True
-    )
+    st.altair_chart(forecast_chart(past_frame, future, color, theme(), unit), width="stretch")
 
 st.dataframe(
     pd.DataFrame(
@@ -86,7 +84,7 @@ st.dataframe(
         }
     ),
     hide_index=True,
-    use_container_width=True,
+    width="stretch",
 )
 st.caption(
     "El pronóstico es el último precio publicado: en las pruebas con la historia oficial, "

@@ -39,7 +39,7 @@ if user:
     with st.sidebar:
         # Plain text: Markdown would turn the email address into a mailto link.
         st.text(f"{user['name'] or user['email']} · {user['role'].lower()}")
-        st.button("Cerrar sesión", on_click=sign_out, use_container_width=True)
+        st.button("Cerrar sesión", on_click=sign_out, width="stretch")
 navigation = st.navigation(list(pages.values()))
 # Right after signing in, go to the role's own page instead of staying on the account page.
 if st.session_state.pop("just_signed_in", False):

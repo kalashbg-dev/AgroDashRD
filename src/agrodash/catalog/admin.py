@@ -41,6 +41,7 @@ def merge_products(session: Session, actor: User, source_id: int, target_id: int
 
     For products the reports renamed ("Cilantro/ grande/ primera" became "Cilantro,
     primera"). The source stays, inactive, so old forecast runs keep their references.
+    Its latest forecasts stay on the source until the next forecast run replaces them.
     It refuses when both products have an official price for the same market, week and
     type: choosing which one to drop is a decision, not a merge.
     """
@@ -49,6 +50,8 @@ def merge_products(session: Session, actor: User, source_id: int, target_id: int
         raise CatalogError("A product cannot be merged into itself")
     source = _get(session, Product, source_id)
     target = _get(session, Product, target_id)
+    if not target.is_active:
+        raise CatalogError("Cannot merge into a retired product")
     theirs = aliased(Price)
     clashes = session.scalar(
         select(func.count())

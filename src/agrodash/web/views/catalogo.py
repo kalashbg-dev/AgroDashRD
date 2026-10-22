@@ -94,11 +94,11 @@ with products_tab:
     ]
     new_name = st.text_input("Nuevo nombre", key="rename_name")
     rename_column, active_column = st.columns(2)
-    renamed = rename_column.button("Renombrar", key="rename_submit", use_container_width=True)
+    renamed = rename_column.button("Renombrar", key="rename_submit", width="stretch")
     if renamed and run(rename_product, chosen[0], new_name):
         st.success("Producto renombrado.")
     toggled = active_column.button(
-        "Retirar" if chosen[2] else "Reactivar", key="product_toggle", use_container_width=True
+        "Retirar" if chosen[2] else "Reactivar", key="product_toggle", width="stretch"
     )
     if toggled and run(set_product_active, chosen[0], active=not chosen[2]):
         st.rerun()
