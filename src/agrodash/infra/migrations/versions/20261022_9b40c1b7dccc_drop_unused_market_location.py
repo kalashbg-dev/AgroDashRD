@@ -17,10 +17,12 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    with op.batch_alter_table("markets", schema=None) as batch_op:
+    # Native DROP COLUMN (SQLite 3.35+): rebuilding the table instead fails once prices
+    # reference markets, because the app enforces foreign keys on SQLite.
+    with op.batch_alter_table("markets", schema=None, recreate="never") as batch_op:
         batch_op.drop_column("location")
 
 
 def downgrade() -> None:
-    with op.batch_alter_table("markets", schema=None) as batch_op:
+    with op.batch_alter_table("markets", schema=None, recreate="never") as batch_op:
         batch_op.add_column(sa.Column("location", sa.VARCHAR(length=120), nullable=True))

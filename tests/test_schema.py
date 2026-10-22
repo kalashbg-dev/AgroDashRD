@@ -252,3 +252,41 @@ def test_a_series_has_one_forecast_per_step_in_a_run(session, catalog):
 
     with pytest.raises(IntegrityError):
         session.commit()
+
+
+def test_dropping_market_location_works_on_a_database_with_prices(tmp_path):
+    url = f"sqlite:///{tmp_path / 'populated.db'}"
+    command.upgrade(alembic_config(url), "2c4cc5bb4efe")
+    engine = create_db_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO markets (id, name, kind, is_active) VALUES (1, 'Mercado Nuevo', 'retail', 1);"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO products (id, name, category, base_unit, is_active)"
+                " VALUES (1, 'Papa', 'Raices', 'lb', 1);"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO units (id, code, label, base_unit, factor) VALUES (1, '1-lb', '1 lb', 'lb', 1);"
+            )
+        )
+        connection.execute(
+            text(
+                "INSERT INTO prices (product_id, market_id, unit_id, observed_on, price_type, source,"
+                " status, amount, price_per_base_unit, is_outlier)"
+                " VALUES (1, 1, 1, '2026-09-01', 'retail', 'official', 'validated', 10, 10, 0);"
+            )
+        )
+
+    command.upgrade(alembic_config(url), "head")
+
+    columns = {column["name"] for column in inspect(engine).get_columns("markets")}
+    assert "location" not in columns
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT count(*) FROM prices")).scalar() == 1
+    engine.dispose()
