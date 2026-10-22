@@ -1,10 +1,13 @@
 import os
 
 import pytest
+from argon2 import PasswordHasher
 from sqlalchemy import make_url, text
 from sqlalchemy.orm import Session
 
+from agrodash.accounts import service as accounts_service
 from agrodash.infra.db import create_db_engine, upgrade_database
+from agrodash.infra.settings import get_settings
 
 # CI sets this to a disposable PostgreSQL database; locally the PostgreSQL runs are skipped.
 POSTGRES_URL = os.getenv("AGRODASH_TEST_POSTGRES_URL")
@@ -39,3 +42,27 @@ def engine(database_url):
 def session(engine):
     with Session(engine) as session:
         yield session
+
+
+@pytest.fixture
+def cli_database(tmp_path, monkeypatch):
+    """A migrated SQLite database that the `agrodash` CLI reads from settings."""
+    url = f"sqlite:///{tmp_path / 'cli.db'}"
+    upgrade_database(url)
+    monkeypatch.setenv("AGRODASH_DATABASE_URL", url)
+    get_settings.cache_clear()
+    engine = create_db_engine(url)
+    yield engine
+    engine.dispose()
+    get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
+def fast_password_hashing(monkeypatch):
+    """Argon2id with minimal cost: same algorithm and format, a fraction of the time."""
+    monkeypatch.setattr(
+        accounts_service, "_hasher", PasswordHasher(time_cost=1, memory_cost=8, parallelism=1)
+    )
+    accounts_service._dummy_hash.cache_clear()
+    yield
+    accounts_service._dummy_hash.cache_clear()

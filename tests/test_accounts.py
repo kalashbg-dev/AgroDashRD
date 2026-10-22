@@ -16,7 +16,6 @@ from agrodash.accounts.service import (
     can_report_prices,
     create_user,
 )
-from agrodash.infra.db import create_db_engine, upgrade_database
 from agrodash.infra.settings import get_settings
 
 PASSWORD = "correct horse battery"
@@ -135,16 +134,6 @@ def test_role_permissions(role, reports, manages):
     assert can_manage(role) is manages
 
 
-@pytest.fixture
-def cli_database(tmp_path, monkeypatch):
-    url = f"sqlite:///{tmp_path / 'cli.db'}"
-    upgrade_database(url)
-    monkeypatch.setenv("AGRODASH_DATABASE_URL", url)
-    get_settings.cache_clear()
-    yield create_db_engine(url)
-    get_settings.cache_clear()
-
-
 def test_create_admin_command_reads_password_from_stdin(cli_database, monkeypatch, capsys):
     monkeypatch.setattr("sys.stdin", io.StringIO(PASSWORD + "\n"))
 
@@ -208,7 +197,7 @@ def test_create_admin_help_describes_password_input(capsys):
     with pytest.raises(SystemExit):
         cli.main(["create-admin", "--help"])
 
-    assert "read from stdin" in capsys.readouterr().out
+    assert "Create an ADMIN account (password read from stdin" in capsys.readouterr().out
 
 
 def test_create_admin_command_reports_errors(cli_database, monkeypatch, capsys):

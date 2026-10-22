@@ -48,6 +48,7 @@ uv sync                 # create .venv and install dependencies
 cp .env.example .env    # adjust settings if needed
 uv run alembic upgrade head   # create or upgrade the database schema
 uv run agrodash create-admin --email you@example.com --superadmin   # first account
+uv run agrodash ingest --drive   # load the official price history from Google Drive
 uv run pytest           # run the test suite
 uv run ruff check .     # lint
 uv run ruff format .    # format
@@ -61,6 +62,19 @@ Settings are read from `AGRODASH_*` environment variables or `.env` (see [.env.e
 |---|---|---|
 | `AGRODASH_ENV` | `development` | `development` or `production` |
 | `AGRODASH_DATABASE_URL` | `sqlite:///agrodash.db` | Production refuses to start on SQLite |
+| `AGRODASH_DRIVE_FILE_IDS` | the official wholesale and retail reports | Comma-separated ids of Drive files shared with "Anyone with the link" |
+
+### Loading price data
+
+`agrodash ingest` loads the official wholesale and retail price reports (`.csv`, `.xlsx` or `.xls`, in the ministry's layouts), either from files (`agrodash ingest mayorista.xlsx minorista.xls`) or from Google Drive (`agrodash ingest --drive`).
+
+- Spelling variants of product names, rubros, units and week words are normalized. New products and name aliases are drafted automatically and stay unreviewed until an admin confirms them.
+- Prices are converted to a base unit (pound, unit or liter). A series (product, market, wholesale or retail, base unit) never mixes base units; a product that changes how it is sold for at least four weeks (pepino retail moved from the pound to the piece in 2024) starts a new series, while a stray unit label is quarantined.
+- The reports' own mistakes are repaired where the intent is clear: an unreadable date between two rows that agree takes their date, an "ñ" exported as ";" is restored, Excel error cells count as missing values, and a damaged type column does not reject a sound row. A name listed twice in a row in the same week is two products the report does not tell apart (Berenjena Pompadur, Plátano Macho x Hembra); the second becomes "… (fila 2)" for an admin to name.
+- Rows that cannot be trusted are kept in quarantine with a reason instead of being loaded: unreadable date or price, unit without a size, unit that does not match its series, or a second price for the same week. `N/D`, blank and `0` cells are missing values, not errors.
+- `agrodash quality-report` summarizes the data: rejections by reason, unreviewed name aliases, products that look renamed between reports (for an admin to confirm), and which series are ready to forecast (at least 104 weeks, 75% of weeks 1-4 covered, a price in the last 8 weeks). `--series-csv FILE` exports every series with its coverage.
+- Technicians report field prices; they stay pending until an admin validates them, and reports more than 50% away from the recent official median are flagged.
+- Loading the same file again does nothing. Another export of the same report (for example the `.csv` of an `.xlsx`) only adds prices that are not stored yet. A failed load is recorded with its error and can be retried.
 
 Reading prices and forecasts needs no account. Accounts exist for people who report prices (TECNICO), manage data (ADMIN) or own the platform (SUPERADMIN). Passwords are hashed with Argon2id, and five failed logins lock an account for 15 minutes.
 

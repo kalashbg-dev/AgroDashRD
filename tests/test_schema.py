@@ -12,6 +12,14 @@ from sqlalchemy.exc import IntegrityError
 from agrodash.catalog.models import BaseUnit, Market, MarketKind, Product, ProductAlias, Unit
 from agrodash.infra.db import MIGRATIONS_LOCATION, Base, alembic_config, create_db_engine
 from agrodash.infra.settings import get_settings
+from agrodash.ingestion.models import (
+    IngestionRun,
+    IngestionStatus,
+    IngestionTrigger,
+    QuarantinedRow,
+    RejectionReason,
+    SourceLayout,
+)
 from agrodash.prices.models import Price, PriceSource, PriceStatus, PriceType
 
 
@@ -144,3 +152,44 @@ def test_cli_migrations_read_the_database_url_from_settings(tmp_path, monkeypatc
         get_settings.cache_clear()
 
     assert "prices" in inspect(create_db_engine(url)).get_table_names()
+
+
+def make_run(**overrides) -> IngestionRun:
+    values = {
+        "file_name": "mayorista.csv",
+        "file_sha256": "a" * 64,
+        "layout": SourceLayout.WHOLESALE,
+        "trigger": IngestionTrigger.FILE,
+        "status": IngestionStatus.SUCCEEDED,
+    }
+    values.update(overrides)
+    return IngestionRun(**values)
+
+
+def test_a_file_is_ingested_successfully_only_once(session):
+    session.add(make_run())
+    session.commit()
+
+    session.add(make_run())
+    with pytest.raises(IntegrityError):
+        session.commit()
+
+
+def test_failed_runs_of_the_same_file_can_be_retried(session):
+    session.add_all([make_run(status=IngestionStatus.FAILED), make_run()])
+    session.commit()
+
+    assert session.query(IngestionRun).count() == 2
+
+
+def test_quarantined_rows_and_prices_point_to_their_run(session, catalog):
+    run = make_run()
+    rejected = QuarantinedRow(
+        run=run, row_number=7, reason=RejectionReason.UNKNOWN_UNIT, raw_values='["x"]'
+    )
+    session.add_all([rejected, make_price(catalog, ingestion_run=run)])
+    session.commit()
+
+    assert session.query(Price).one().ingestion_run_id == run.id
+    assert session.query(Price).one().is_outlier is False
+    assert run.quarantined_rows == [rejected]

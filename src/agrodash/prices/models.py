@@ -1,13 +1,14 @@
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Numeric, func, text
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Numeric, false, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from agrodash.accounts.models import User
 from agrodash.catalog.models import Market, Product, Unit
 from agrodash.infra.db import Base, enum_column
+from agrodash.ingestion.models import IngestionRun
 
 
 class PriceType(StrEnum):
@@ -24,6 +25,16 @@ class PriceStatus(StrEnum):
     PENDING = "pending"
     VALIDATED = "validated"
     REJECTED = "rejected"
+
+
+def round_amount(amount: Decimal) -> Decimal:
+    """Price as stored: cents, rounded half up like a receipt."""
+    return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def per_base_unit(amount: Decimal, factor: Decimal) -> Decimal:
+    """Stored price converted to one base unit (one pound, piece or liter)."""
+    return (round_amount(amount) / factor).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
 
 
 class Price(Base):
@@ -57,6 +68,10 @@ class Price(Base):
     unit_id: Mapped[int] = mapped_column(ForeignKey("units.id"))
     # Who submitted a field report; official prices have no reporter.
     reporter_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True)
+    # The file load that produced an official price; field reports have none.
+    ingestion_run_id: Mapped[int | None] = mapped_column(
+        ForeignKey("ingestion_runs.id"), index=True
+    )
     observed_on: Mapped[date]
     price_type: Mapped[PriceType] = mapped_column(enum_column(PriceType, "price_type"))
     source: Mapped[PriceSource] = mapped_column(enum_column(PriceSource, "price_source"))
@@ -65,9 +80,12 @@ class Price(Base):
     )
     amount: Mapped[Decimal] = mapped_column(Numeric(12, 2))
     price_per_base_unit: Mapped[Decimal] = mapped_column(Numeric(14, 4))
+    # A field report far from the official series; reviewers see it flagged.
+    is_outlier: Mapped[bool] = mapped_column(default=False, server_default=false())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     product: Mapped[Product] = relationship()
     market: Mapped[Market] = relationship()
     unit: Mapped[Unit] = relationship()
     reporter: Mapped[User | None] = relationship()
+    ingestion_run: Mapped[IngestionRun | None] = relationship()
