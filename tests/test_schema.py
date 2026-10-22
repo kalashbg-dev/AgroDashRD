@@ -10,6 +10,7 @@ from sqlalchemy import inspect, text
 from sqlalchemy.exc import IntegrityError
 
 from agrodash.catalog.models import BaseUnit, Market, MarketKind, Product, ProductAlias, Unit
+from agrodash.forecasting.models import Forecast, ForecastEvaluation, ForecastRun, ForecastStatus
 from agrodash.infra.db import MIGRATIONS_LOCATION, Base, alembic_config, create_db_engine
 from agrodash.infra.settings import get_settings
 from agrodash.ingestion.models import (
@@ -193,3 +194,61 @@ def test_quarantined_rows_and_prices_point_to_their_run(session, catalog):
     assert session.query(Price).one().ingestion_run_id == run.id
     assert session.query(Price).one().is_outlier is False
     assert run.quarantined_rows == [rejected]
+
+
+def make_forecast_run(**overrides) -> ForecastRun:
+    values = {"model_version": "f4.1", "horizon": 4, "status": ForecastStatus.SUCCEEDED}
+    values.update(overrides)
+    return ForecastRun(**values)
+
+
+def test_forecasts_and_evaluations_belong_to_their_run(session, catalog):
+    product, market, _ = catalog
+    run = make_forecast_run()
+    series = {
+        "product": product,
+        "market": market,
+        "price_type": PriceType.RETAIL,
+        "base_unit": BaseUnit.POUND,
+    }
+    session.add_all(
+        [
+            ForecastEvaluation(run=run, model="AutoETS", mase=0.8, selected=True, **series),
+            Forecast(
+                run=run,
+                model="AutoETS",
+                step=1,
+                target_on=date(2026, 10, 1),
+                value=Decimal("30.5"),
+                lo_80=Decimal("28"),
+                hi_80=Decimal("33"),
+                lo_95=Decimal("27"),
+                hi_95=Decimal("34"),
+                **series,
+            ),
+        ]
+    )
+    session.commit()
+
+    assert [forecast.value for forecast in run.forecasts] == [Decimal("30.5000")]
+    assert run.evaluations[0].selected is True
+
+
+def test_a_series_has_one_forecast_per_step_in_a_run(session, catalog):
+    product, market, _ = catalog
+    run = make_forecast_run()
+    forecast = {
+        "run": run,
+        "product": product,
+        "market": market,
+        "price_type": PriceType.RETAIL,
+        "base_unit": BaseUnit.POUND,
+        "model": "AutoETS",
+        "step": 1,
+        "target_on": date(2026, 10, 1),
+        "value": Decimal("30"),
+    }
+    session.add_all([Forecast(**forecast), Forecast(**forecast)])
+
+    with pytest.raises(IntegrityError):
+        session.commit()

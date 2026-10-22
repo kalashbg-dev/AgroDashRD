@@ -2,6 +2,7 @@ from alembic import context
 
 import agrodash.accounts.models  # noqa: F401  (registers tables on Base.metadata)
 import agrodash.catalog.models  # noqa: F401
+import agrodash.forecasting.models  # noqa: F401
 import agrodash.ingestion.models  # noqa: F401
 import agrodash.prices.models  # noqa: F401
 from agrodash.infra.db import Base, create_db_engine
