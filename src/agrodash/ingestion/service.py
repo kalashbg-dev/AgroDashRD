@@ -78,7 +78,7 @@ def ingest_file(
 ) -> IngestionRun:
     """Load one report file and return its run (the earlier run if it was already loaded)."""
     digest = sha256(content).hexdigest()
-    loaded = _succeeded_run(session, digest)
+    loaded = loaded_run(session, content)
     if loaded is not None:
         return loaded
 
@@ -115,6 +115,11 @@ def ingest_file(
         session.commit()
         raise IngestionError(message) from error
     return run
+
+
+def loaded_run(session: Session, content: bytes) -> IngestionRun | None:
+    """The run that already loaded this exact file, if any."""
+    return _succeeded_run(session, sha256(content).hexdigest())
 
 
 def _succeeded_run(session: Session, digest: str) -> IngestionRun | None:

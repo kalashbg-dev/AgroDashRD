@@ -12,6 +12,13 @@ class Settings(BaseSettings):
 
     env: Literal["development", "production"] = "development"
     database_url: str = "sqlite:///agrodash.db"
+    # Public Google Drive files loaded by `agrodash ingest --drive`, comma-separated:
+    # the official wholesale (.xlsx) and retail (.xls) price reports.
+    drive_file_ids: str = "17K3F_hI0OV_eWwNFo0WESPsxrnhuQKKK,1lUxB0FdL7PEs4c-jgQ1J8RS0jDhWqaum"
+
+    @property
+    def drive_file_id_list(self) -> list[str]:
+        return [file_id.strip() for file_id in self.drive_file_ids.split(",") if file_id.strip()]
 
     @field_validator("database_url")
     @classmethod

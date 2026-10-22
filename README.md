@@ -48,6 +48,7 @@ uv sync                 # create .venv and install dependencies
 cp .env.example .env    # adjust settings if needed
 uv run alembic upgrade head   # create or upgrade the database schema
 uv run agrodash create-admin --email you@example.com --superadmin   # first account
+uv run agrodash ingest --drive   # load the official price history from Google Drive
 uv run pytest           # run the test suite
 uv run ruff check .     # lint
 uv run ruff format .    # format
@@ -61,6 +62,16 @@ Settings are read from `AGRODASH_*` environment variables or `.env` (see [.env.e
 |---|---|---|
 | `AGRODASH_ENV` | `development` | `development` or `production` |
 | `AGRODASH_DATABASE_URL` | `sqlite:///agrodash.db` | Production refuses to start on SQLite |
+| `AGRODASH_DRIVE_FILE_IDS` | the official wholesale and retail reports | Comma-separated ids of Drive files shared with "Anyone with the link" |
+
+### Loading price data
+
+`agrodash ingest` loads the official wholesale and retail price reports (`.csv`, `.xlsx` or `.xls`, in the ministry's layouts), either from files (`agrodash ingest mayorista.xlsx minorista.xls`) or from Google Drive (`agrodash ingest --drive`).
+
+- Spelling variants of product names, rubros, units and week words are normalized. New products and name aliases are drafted automatically and stay unreviewed until an admin confirms them.
+- Prices are converted to a base unit (pound, unit or liter). One series (product and wholesale or retail) never mixes base units.
+- Rows that cannot be trusted are kept in quarantine with a reason instead of being loaded: unreadable date or price, unit without a size, unit that does not match its series, or a second price for the same week. `N/D`, blank and `0` cells are missing values, not errors.
+- Loading the same file again does nothing. Another export of the same report (for example the `.csv` of an `.xlsx`) only adds prices that are not stored yet. A failed load is recorded with its error and can be retried.
 
 Reading prices and forecasts needs no account. Accounts exist for people who report prices (TECNICO), manage data (ADMIN) or own the platform (SUPERADMIN). Passwords are hashed with Argon2id, and five failed logins lock an account for 15 minutes.
 
