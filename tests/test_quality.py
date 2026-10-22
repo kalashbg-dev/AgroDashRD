@@ -210,3 +210,20 @@ def test_a_series_that_changes_unit_is_reported_once_per_unit(session):
     series = [(s.product, s.base_unit, s.weeks) for s in build_report(session).series]
 
     assert series == [("Pepino", "lb", 4), ("Pepino", "unit", 4)]
+
+
+def test_inactive_products_and_markets_are_never_ready_to_forecast(session, monkeypatch):
+    monkeypatch.setattr(quality, "MIN_WEEKS", 8)
+    full = {(2026, month): [1, 2, 3, 4] for month in (7, 8, 9)}
+    retired = add_series(session, "Retirado", full)
+    add_series(session, "Activo", full)
+    retired.is_active = False
+    session.commit()
+
+    ready = {series.product: series.ready for series in build_report(session).series}
+
+    assert ready == {"Activo": True, "Retirado": False}
+
+    session.query(Market).one().is_active = False
+    session.commit()
+    assert not any(series.ready for series in build_report(session).series)

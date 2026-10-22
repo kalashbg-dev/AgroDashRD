@@ -161,6 +161,8 @@ def series_coverage(session: Session) -> list[SeriesCoverage]:
             Market.name,
             Price.price_type,
             Unit.base_unit,
+            Product.is_active,
+            Market.is_active,
             func.min(Price.observed_on),
             func.max(Price.observed_on),
             func.count(func.distinct(Price.observed_on)),
@@ -172,7 +174,14 @@ def series_coverage(session: Session) -> list[SeriesCoverage]:
         .where(Price.source == PriceSource.OFFICIAL)
         # A product sold by the pound and later by the piece has one series per unit.
         .group_by(
-            Product.id, Market.id, Product.name, Market.name, Price.price_type, Unit.base_unit
+            Product.id,
+            Market.id,
+            Product.name,
+            Market.name,
+            Price.price_type,
+            Unit.base_unit,
+            Product.is_active,
+            Market.is_active,
         )
         .order_by(Product.name, Market.name, Price.price_type, Unit.base_unit)
     )
@@ -184,6 +193,8 @@ def series_coverage(session: Session) -> list[SeriesCoverage]:
         market,
         price_type,
         base_unit,
+        product_active,
+        market_active,
         first_on,
         last_on,
         weeks,
@@ -203,7 +214,10 @@ def series_coverage(session: Session) -> list[SeriesCoverage]:
                 last_on=last_on,
                 weeks=weeks,
                 coverage=coverage,
-                ready=weeks >= MIN_WEEKS
+                # An admin retires a product or market from forecasting by deactivating it.
+                ready=product_active
+                and market_active
+                and weeks >= MIN_WEEKS
                 and coverage >= MIN_COVERAGE
                 and latest_by_type[price_type] - last_on <= MAX_STALENESS,
             )
