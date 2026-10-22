@@ -37,7 +37,14 @@ from agrodash.ingestion.normalize import (
     parse_week_date,
 )
 from agrodash.ingestion.readers import UnreadableFile, detect_layout, is_blank, read_rows
-from agrodash.prices.models import Price, PriceSource, PriceStatus, PriceType
+from agrodash.prices.models import (
+    Price,
+    PriceSource,
+    PriceStatus,
+    PriceType,
+    per_base_unit,
+    round_amount,
+)
 
 MAX_FILE_BYTES = 50 * 1024 * 1024
 # The wholesale report has no market column; it is collected at Mercado Nuevo.
@@ -47,8 +54,6 @@ RETAIL_COLUMNS = 14
 RETAIL_MARKET_COLUMNS = range(4, 11)
 SUPERMARKET_NAMES = {"supermercado"}
 INSERT_BATCH = 5000
-AMOUNT_PLACES = Decimal("0.01")
-PER_BASE_UNIT_PLACES = Decimal("0.0001")
 
 
 class IngestionError(Exception):
@@ -292,9 +297,9 @@ class _Load:
                 detail = f"{product.name} already has a price at {market.name} that week"
                 self._reject_observation(observation, RejectionReason.DUPLICATE_PRICE, detail)
                 continue
-            amount = observation.amount.quantize(AMOUNT_PLACES)
-            per_base_unit = (observation.amount / unit.factor).quantize(PER_BASE_UNIT_PLACES)
-            if amount <= 0 or per_base_unit <= 0:
+            amount = round_amount(observation.amount)
+            converted = per_base_unit(observation.amount, unit.factor)
+            if amount <= 0 or converted <= 0:
                 detail = f"{observation.amount} is too small to store"
                 self._reject_observation(observation, RejectionReason.INVALID_PRICE, detail)
                 continue
@@ -313,7 +318,7 @@ class _Load:
                     "source": PriceSource.OFFICIAL,
                     "status": PriceStatus.VALIDATED,
                     "amount": amount,
-                    "price_per_base_unit": per_base_unit,
+                    "price_per_base_unit": converted,
                 }
             )
         self._insert(Price, prices)

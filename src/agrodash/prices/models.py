@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from decimal import Decimal
+from decimal import ROUND_HALF_UP, Decimal
 from enum import StrEnum
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Numeric, false, func, text
@@ -25,6 +25,16 @@ class PriceStatus(StrEnum):
     PENDING = "pending"
     VALIDATED = "validated"
     REJECTED = "rejected"
+
+
+def round_amount(amount: Decimal) -> Decimal:
+    """Price as stored: cents, rounded half up like a receipt."""
+    return amount.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+
+
+def per_base_unit(amount: Decimal, factor: Decimal) -> Decimal:
+    """Stored price converted to one base unit (one pound, piece or liter)."""
+    return (round_amount(amount) / factor).quantize(Decimal("0.0001"), rounding=ROUND_HALF_UP)
 
 
 class Price(Base):

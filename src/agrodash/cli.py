@@ -99,7 +99,14 @@ def _ingest(args: argparse.Namespace) -> int:
                 print(f"error: {path.name}: file not found", file=sys.stderr)
                 ok = False
                 continue
+            except OSError as error:
+                print(f"error: {path.name}: cannot read file ({error.strerror})", file=sys.stderr)
+                ok = False
+                continue
             ok &= _ingest_one(session, path.name, content, IngestionTrigger.FILE)
+        if args.drive and not settings.drive_file_id_list:
+            print("error: AGRODASH_DRIVE_FILE_IDS is empty", file=sys.stderr)
+            ok = False
         if args.drive:
             for file_id in settings.drive_file_id_list:
                 try:

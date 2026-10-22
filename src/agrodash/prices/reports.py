@@ -5,13 +5,20 @@ from datetime import date, timedelta
 from decimal import Decimal
 from statistics import median
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from agrodash.accounts.models import User
 from agrodash.accounts.service import can_manage, can_report_prices
 from agrodash.catalog.models import BaseUnit, Market, Product, Unit
-from agrodash.prices.models import Price, PriceSource, PriceStatus, PriceType
+from agrodash.prices.models import (
+    Price,
+    PriceSource,
+    PriceStatus,
+    PriceType,
+    per_base_unit,
+    round_amount,
+)
 
 # A report more than 50% away from the recent official median is flagged for review.
 OUTLIER_DEVIATION = Decimal("0.5")
@@ -40,6 +47,7 @@ def report_price(
     unit = session.get(Unit, unit_id)
     if product is None or market is None or unit is None:
         raise ReportError("Unknown product, market or unit")
+    amount = round_amount(amount)
     if amount <= 0:
         raise ReportError("Price must be greater than zero")
     if observed_on > date.today():
@@ -51,7 +59,7 @@ def report_price(
             f"choose a unit in {series_unit}"
         )
 
-    per_base_unit = (amount / unit.factor).quantize(Decimal("0.0001"))
+    converted = per_base_unit(amount, unit.factor)
     reference = _official_median(session, product, market, price_type, observed_on)
     price = Price(
         product=product,
@@ -62,10 +70,10 @@ def report_price(
         price_type=price_type,
         source=PriceSource.FIELD_REPORT,
         status=PriceStatus.PENDING,
-        amount=amount.quantize(Decimal("0.01")),
-        price_per_base_unit=per_base_unit,
+        amount=amount,
+        price_per_base_unit=converted,
         is_outlier=reference is not None
-        and abs(per_base_unit - reference) > reference * OUTLIER_DEVIATION,
+        and abs(converted - reference) > reference * OUTLIER_DEVIATION,
     )
     session.add(price)
     session.commit()
@@ -75,16 +83,22 @@ def report_price(
 def review_report(session: Session, reviewer: User, price_id: int, *, approve: bool) -> Price:
     if not (reviewer.is_active and can_manage(reviewer.role)):
         raise ReportError("Your account cannot review reports")
-    price = session.get(Price, price_id)
-    if (
-        price is None
-        or price.source != PriceSource.FIELD_REPORT
-        or price.status != PriceStatus.PENDING
-    ):
+    # Conditional update: if another admin reviewed it meanwhile, nothing matches.
+    reviewed = session.execute(
+        update(Price)
+        .where(
+            Price.id == price_id,
+            Price.source == PriceSource.FIELD_REPORT,
+            Price.status == PriceStatus.PENDING,
+        )
+        .values(status=PriceStatus.VALIDATED if approve else PriceStatus.REJECTED)
+        .execution_options(synchronize_session=False)
+    )
+    if reviewed.rowcount != 1:
+        session.rollback()
         raise ReportError("This price is not a pending field report")
-    price.status = PriceStatus.VALIDATED if approve else PriceStatus.REJECTED
     session.commit()
-    return price
+    return session.get(Price, price_id)
 
 
 def pending_reports(session: Session) -> list[Price]:
@@ -109,7 +123,7 @@ def _series_base_unit(session: Session, product: Product, price_type: PriceType)
             Price.source == PriceSource.OFFICIAL,
         )
         .group_by(Unit.base_unit)
-        .order_by(func.count().desc())
+        .order_by(func.count().desc(), Unit.base_unit)
         .limit(1)
     )
     return most_used or product.base_unit

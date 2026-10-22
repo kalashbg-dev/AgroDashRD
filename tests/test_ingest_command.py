@@ -130,3 +130,33 @@ def test_ingest_help_names_the_sources(capsys):
     assert "Load official price reports (.csv, .xlsx, .xls) from files or Google Drive" in (
         capsys.readouterr().out
     )
+
+
+def test_ingest_command_reports_unreadable_paths_and_keeps_going(cli_database, tmp_path, capsys):
+    exit_code = cli.main(["ingest", str(tmp_path), str(FIXTURES / "mayorista.csv")])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert f"error: {tmp_path.name}: cannot read file" in captured.err
+    assert "mayorista.csv: loaded 4 prices" in captured.out
+
+
+def test_ingest_drive_needs_configured_ids(cli_database, monkeypatch, capsys):
+    monkeypatch.setenv("AGRODASH_DRIVE_FILE_IDS", " , ")
+
+    assert cli.main(["ingest", "--drive"]) == 1
+
+    assert "error: AGRODASH_DRIVE_FILE_IDS is empty" in capsys.readouterr().err
+
+
+def test_download_reports_timeouts_while_reading(monkeypatch):
+    class SlowResponse(FakeResponse):
+        def read(self, *_):
+            raise TimeoutError("The read operation timed out")
+
+    monkeypatch.setattr(drive, "urlopen", fake_urlopen(SlowResponse(b"", "text/csv", "a.csv")))
+
+    with pytest.raises(
+        DriveError, match=f"Could not download {FILE_ID}: The read operation timed out"
+    ):
+        download(FILE_ID)

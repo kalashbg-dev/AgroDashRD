@@ -166,3 +166,48 @@ def test_pending_reports_list_outliers_first(session, catalog, users):
     outlier = report(session, catalog, users[Role.TECNICO], "90")
 
     assert pending_reports(session) == [outlier, normal]
+
+
+def test_amounts_are_rounded_before_converting_and_must_stay_positive(session, catalog, users):
+    price = report(session, catalog, users[Role.TECNICO], amount="3000.005", unit="sack")
+
+    assert (price.amount, price.price_per_base_unit) == (Decimal("3000.01"), Decimal("30.0001"))
+    with pytest.raises(ReportError, match="Price must be greater than zero"):
+        report(session, catalog, users[Role.TECNICO], amount="0.001")
+
+
+def test_without_prices_at_the_market_the_median_of_all_markets_is_used(session, catalog, users):
+    other = Market(name="Mercadom", kind=MarketKind.RETAIL)
+    session.add(other)
+    session.commit()
+
+    price = report_price(
+        session,
+        users[Role.TECNICO],
+        product_id=catalog["product"].id,
+        market_id=other.id,
+        unit_id=catalog["pound"].id,
+        amount=Decimal("90"),
+        observed_on=WEEK,
+        price_type=PriceType.RETAIL,
+    )
+
+    assert price.is_outlier is True
+
+
+def test_a_report_reviewed_meanwhile_by_another_admin_is_not_overwritten(
+    session, catalog, users, engine
+):
+    from sqlalchemy.orm import Session
+
+    price = report(session, catalog, users[Role.TECNICO])
+    with Session(engine) as other_admin:
+        review_report(
+            other_admin, other_admin.merge(users[Role.SUPERADMIN]), price.id, approve=False
+        )
+
+    with pytest.raises(ReportError, match="not a pending field report"):
+        review_report(session, users[Role.ADMIN], price.id, approve=True)
+
+    session.expire_all()
+    assert session.get(Price, price.id).status is PriceStatus.REJECTED

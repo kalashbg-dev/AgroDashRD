@@ -34,6 +34,9 @@ def download(file_id: str, max_bytes: int = MAX_FILE_BYTES) -> tuple[str, bytes]
             file_name = response.headers.get_filename() or file_id
     except urllib.error.URLError as error:
         raise DriveError(f"Could not download {file_id}: {error.reason}") from error
+    except OSError as error:
+        # Timeouts and dropped connections while reading the body.
+        raise DriveError(f"Could not download {file_id}: {error}") from error
     if len(content) > max_bytes:
         raise DriveError(f"{file_id} is larger than {max_bytes} bytes")
     # The name only labels the run and picks the reader; never use it as a path.
