@@ -8,7 +8,8 @@ from agrodash.infra.db import Base, enum_column
 
 
 class Role(StrEnum):
-    AGRICULTOR = "AGRICULTOR"
+    """Who can change data. Reading prices and forecasts needs no account at all."""
+
     TECNICO = "TECNICO"
     ADMIN = "ADMIN"
     SUPERADMIN = "SUPERADMIN"

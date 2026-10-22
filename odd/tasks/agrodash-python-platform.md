@@ -33,7 +33,12 @@ Assumption: the wholesale CSV belongs to "Mercado Nuevo" (legacy assumption) unt
 | T4b | S5 | inline | done | last-price forecast with calibrated ranges and a per-run benchmark (user decision L24) |
 | T4c | S5 | inline | done (52901da) | schema: forecast_runs, series evaluations, forecasts (migration, own commit) |
 | T4d | S5 | inline | done (8b8c6a7, df62152, 893a2f3, 53971ba); F4 closed (L26) | `agrodash forecast` batch job storing results; series without forecast listed as "sin pronóstico"; docs |
-| T5 | S6 | inline | pending | |
+| T5a | S6 | inline | pending | remove the AGRICULTOR role (migration, own commit) |
+| T5b | S6 | inline | pending | Streamlit app shell: navigation, login and logout with lockout, role-gated pages, mobile-first layout |
+| T5c | S6 | inline | pending | public pages: Precios (latest prices, history chart) and Pronóstico (forecast with ranges, "sin pronóstico") |
+| T5d | S6 | inline | pending | Reportar precio (TECNICO and up) |
+| T5e | S6 | inline | pending | Admin: upload and ingest, quarantine, validate field reports, users |
+| T5f | S6 | inline | pending | Admin catalog: review aliases, rename and merge products (rename candidates, "(fila 2)"), activate or deactivate products and markets |
 | T6 | S7 | inline | pending | |
 
 Route evidence: phases depend on each other (no independent parallel units), so no writer trigger fires; work stays inline.
@@ -106,4 +111,5 @@ Route evidence: phases depend on each other (no independent parallel units), so 
   - The full suite against SQLite and PostgreSQL: 408 passed.
   - Real pipeline on PostgreSQL: the same 290,162 prices, 1,153 rejections and 475 series forecast as on SQLite (ingest 2.5 min, forecast --skip-benchmark 15 s).
   - Pending manual steps for the user: add AGRODASH_DRIVE_FILE_IDS to .env.example (permissions deny the agent), resolve the old GitGuardian alert, then push feat/f4-forecasting and open its PR.
+- L27 (2026-10-22, F5 start): PR #8 (F4) is merged into main 583bdd2, together with the user's .env.example commit. User decision (AskUserQuestion) on the AGRICULTOR role: "Quitar el rol (Recomendado)": reading prices and forecasts needs no account, so the roles are TECNICO, ADMIN and SUPERADMIN. F5 branch feat/f5-web starts from main.
 - L3: plan approved; data-quality gate added to S4/S5. Engram mirror pending: `mem_current_project` is ambiguous from `~/Downloads` (agrodashrd vs another repo).

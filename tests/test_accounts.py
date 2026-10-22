@@ -36,7 +36,7 @@ def test_create_user_normalizes_email_and_hashes_password(session, user):
 
 def test_create_user_rejects_duplicate_email_regardless_of_case(session, user):
     with pytest.raises(AccountError, match="already registered"):
-        create_user(session, "TECNICO@example.com", PASSWORD, Role.AGRICULTOR)
+        create_user(session, "TECNICO@example.com", PASSWORD, Role.ADMIN)
 
 
 def test_create_user_rejects_short_passwords(session):
@@ -123,7 +123,6 @@ def test_refused_logins_spend_hashing_time(session, user, monkeypatch, state):
 @pytest.mark.parametrize(
     ("role", "reports", "manages"),
     [
-        (Role.AGRICULTOR, False, False),
         (Role.TECNICO, True, False),
         (Role.ADMIN, True, True),
         (Role.SUPERADMIN, True, True),
