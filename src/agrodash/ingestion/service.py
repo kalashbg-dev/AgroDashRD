@@ -31,6 +31,7 @@ from agrodash.ingestion.normalize import (
     InvalidValue,
     clean_name,
     fold,
+    letters,
     name_key,
     normalize_category,
     parse_amount,
@@ -249,7 +250,7 @@ class _Load:
     def _wholesale_row(self, row_number: int, row: list[object]) -> None:
         # The type column is often damaged (#NAME?, a rubro, blank) on sound rows; only a
         # row that says it belongs to the other report is out of place.
-        if len(row) < WHOLESALE_COLUMNS or _letters(row[2]) == "minorista":
+        if len(row) < WHOLESALE_COLUMNS or letters(row[2]) == "minorista":
             self._reject(row_number, row, RejectionReason.UNEXPECTED_LAYOUT, "not a wholesale row")
             return
         name, rubro, _, unit_text, amount_cell, week, month, year = row[:WHOLESALE_COLUMNS]
@@ -263,7 +264,7 @@ class _Load:
         )
 
     def _retail_row(self, row_number: int, row: list[object], markets: list[str]) -> None:
-        if len(row) < RETAIL_COLUMNS or _letters(row[2]) == "mayorista":
+        if len(row) < RETAIL_COLUMNS or letters(row[2]) == "mayorista":
             self._reject(row_number, row, RejectionReason.UNEXPECTED_LAYOUT, "not a retail row")
             return
         cells = [
@@ -492,7 +493,3 @@ def _readable_date(row: list[object], date_columns) -> bool:
 
 def _date_label(row: list[object], date_columns) -> tuple[str, ...]:
     return tuple(fold(row[column]) if column < len(row) else "" for column in date_columns)
-
-
-def _letters(cell: object) -> str:
-    return "".join(character for character in fold(cell) if character.isalpha())

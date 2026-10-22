@@ -6,7 +6,6 @@ look irregular (3 to 10 days around a month's end), so every series is indexed b
 ordered set of periods the reports actually published.
 """
 
-import calendar as calendar_module
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
@@ -16,7 +15,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from agrodash.catalog.models import BaseUnit, Unit
-from agrodash.ingestion.normalize import week_of_month
+from agrodash.ingestion.normalize import week_of_month, week_slot
 from agrodash.ingestion.quality import SeriesCoverage
 from agrodash.prices.models import Price, PriceSource, PriceStatus, PriceType
 
@@ -62,9 +61,7 @@ def period_of(day: date) -> Period:
 
 
 def period_date(period: Period) -> date:
-    year, month, week = period
-    last_day = calendar_module.monthrange(year, month)[1]
-    return date(year, month, min(1 + 7 * (week - 1), last_day))
+    return week_slot(*period)
 
 
 def next_periods(last: Period, count: int) -> list[Period]:

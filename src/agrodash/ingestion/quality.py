@@ -94,16 +94,15 @@ def build_report(session: Session) -> QualityReport:
 
 
 def _rejections(session: Session) -> dict[str, int]:
-    """Rejections of the latest successful load of each report type. Another export of
-    the same report quarantines the same rows again, so older loads would count twice."""
-    latest_runs = (
-        select(func.max(IngestionRun.id))
-        .where(IngestionRun.status == IngestionStatus.SUCCEEDED)
-        .group_by(IngestionRun.layout)
+    """Rejections of the loads that added prices. Another export of an already loaded
+    report adds none and would quarantine the same rows again, so it is left out;
+    weekly files add new prices, so every one of them counts."""
+    counted_runs = select(IngestionRun.id).where(
+        IngestionRun.status == IngestionStatus.SUCCEEDED, IngestionRun.prices_loaded > 0
     )
     rows = session.execute(
         select(QuarantinedRow.reason, func.count())
-        .where(QuarantinedRow.run_id.in_(latest_runs))
+        .where(QuarantinedRow.run_id.in_(counted_runs))
         .group_by(QuarantinedRow.reason)
         .order_by(QuarantinedRow.reason)
     )

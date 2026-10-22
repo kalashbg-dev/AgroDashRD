@@ -152,7 +152,7 @@ def test_renamed_products_are_suggested_for_review(session):
     ]
 
 
-def test_rejections_count_only_the_latest_load_of_each_report_type(session):
+def test_another_export_of_the_same_report_does_not_count_rejections_twice(session):
     for name in ("minorista.csv", "minorista.xls", "mayorista.csv"):
         ingest_file(session, (FIXTURES / name).read_bytes(), name, IngestionTrigger.FILE)
 
@@ -160,6 +160,18 @@ def test_rejections_count_only_the_latest_load_of_each_report_type(session):
 
     assert rejections["invalid_price"] == 2
     assert sum(rejections.values()) == 7
+
+
+def test_rejections_of_every_file_that_added_prices_are_counted(session):
+    for name, week, price in (("semana1.csv", "Primera", 1500), ("semana2.csv", "Segunda", 1600)):
+        rows = [
+            f"Papa;Raices;Mayorista;Quintal;{price};{week};Agosto;2017",
+            f"Ajo;Raices;Mayorista;Saco;10;{week};Agosto;2017",
+        ]
+        ingest_file(session, "\r\n".join(rows).encode(), name, IngestionTrigger.FILE)
+
+    # Weekly files are different reports: the first week's rejection must not vanish.
+    assert build_report(session).rejections == {"unknown_unit": 2}
 
 
 def test_staleness_is_measured_within_each_price_type(session, monkeypatch):

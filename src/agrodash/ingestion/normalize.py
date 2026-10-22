@@ -187,8 +187,13 @@ def parse_week_date(week: object, month: object, year: object) -> date:
     year_number = _parse_year(year)
     if week_number is None or month_number is None or year_number is None:
         raise InvalidValue(f"unreadable week {week!r} {month!r} {year!r}")
-    last_day = calendar.monthrange(year_number, month_number)[1]
-    return date(year_number, month_number, min(1 + 7 * (week_number - 1), last_day))
+    return week_slot(year_number, month_number, week_number)
+
+
+def week_slot(year: int, month: int, week: int) -> date:
+    """Stored date of week 1-5 of a month: day 1 + 7*(week-1), never past the month's end."""
+    last_day = calendar.monthrange(year, month)[1]
+    return date(year, month, min(1 + 7 * (week - 1), last_day))
 
 
 def week_of_month(day: date) -> int:
@@ -302,12 +307,13 @@ def _plain(number: Decimal) -> str:
 
 @lru_cache(maxsize=4096)
 def normalize_category(rubro: object) -> str:
-    letters = _letters(fold(rubro).replace(" y ", " "))
-    best_score, best = max((_typo_similarity(letters, _letters(c)), c) for c in CATEGORIES)
+    folded = letters(fold(rubro).replace(" y ", " "))
+    best_score, best = max((_typo_similarity(folded, letters(c)), c) for c in CATEGORIES)
     return best if best_score >= 0.75 else UNKNOWN_CATEGORY
 
 
-def _letters(text: object) -> str:
+def letters(text: object) -> str:
+    """Only the letters of a text, folded ("Mayo+B32868rista" -> "mayobrista")."""
     return re.sub(r"[^a-z]", "", fold(text))
 
 
