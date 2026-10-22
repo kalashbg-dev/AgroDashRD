@@ -175,7 +175,13 @@ def same_product_name(left_key: str, right_key: str) -> bool:
 
 @lru_cache(maxsize=4096)
 def parse_week_date(week: object, month: object, year: object) -> date:
-    """Date for "week N of month": day 1 + 7*(N-1), never past the month's end."""
+    """Date for "week N of month": day 1 + 7*(N-1), never past the month's end.
+
+    The reports name weeks (Primera..Quinta), not dates: some months have a fifth week
+    and others do not, with no calendar rule behind it. The date is a stable slot that
+    keeps reports in order; it is not the day prices were collected, so forecasting
+    should count report periods rather than calendar days between them.
+    """
     week_number = WEEK_PREFIXES.get(fold(week)[:3])
     month_number = _parse_month(month)
     year_number = _parse_year(year)
@@ -183,6 +189,15 @@ def parse_week_date(week: object, month: object, year: object) -> date:
         raise InvalidValue(f"unreadable week {week!r} {month!r} {year!r}")
     last_day = calendar.monthrange(year_number, month_number)[1]
     return date(year_number, month_number, min(1 + 7 * (week_number - 1), last_day))
+
+
+def week_of_month(day: date) -> int:
+    """Week number (1-5) a stored date stands for; the inverse of parse_week_date.
+
+    Weeks 1-4 are days 1, 8, 15 and 22; week 5 is day 29, or the 28th in a short
+    February, so any day from the 28th on is week 5.
+    """
+    return 5 if day.day >= 28 else (day.day - 1) // 7 + 1
 
 
 def _parse_month(month: object) -> int | None:
@@ -251,8 +266,10 @@ def parse_unit(text: object) -> ParsedUnit | None:
     if folded in MEASURES:
         return _unit(*MEASURES[folded])
     sizes = [
-        (MEASURES[word], Decimal(number.replace(",", ".")))
-        for number, word in re.findall(r"(\d+(?:[.,]\d+)?)\s*/?\s*([a-z]+)", folded)
+        (MEASURES[word], _range_middle(low, high))
+        for low, high, word in re.findall(
+            r"(\d+(?:[.,]\d+)?)(?:\s*-\s*(\d+(?:[.,]\d+)?))?\s*/?\s*([a-z]+)", folded
+        )
         if word in MEASURES
     ]
     if sizes:
@@ -265,6 +282,12 @@ def parse_unit(text: object) -> ParsedUnit | None:
     if "/" in folded and last_word in MEASURES:
         return _unit(*MEASURES[last_word])
     return None
+
+
+def _range_middle(low: str, high: str) -> Decimal:
+    # "Unidad/8-10 libra" is a piece of 8 to 10 pounds: take 9, not either end.
+    low_value = Decimal(low.replace(",", "."))
+    return (low_value + Decimal(high.replace(",", "."))) / 2 if high else low_value
 
 
 def _unit(base_unit: BaseUnit, factor: Decimal) -> ParsedUnit | None:

@@ -13,6 +13,7 @@ from agrodash.ingestion.normalize import (
     parse_week_date,
     repair_name,
     same_product_name,
+    week_of_month,
 )
 
 
@@ -95,6 +96,11 @@ def test_unreadable_or_negative_amounts_are_invalid(raw):
         ("Huacal/220 Unidad", BaseUnit.UNIT, "220"),
         # Both a count and a weight: the weight is what the price is comparable by.
         ("Saco/180 unid/125/lib", BaseUnit.POUND, "125"),
+        # A weight range is a piece of about the middle weight.
+        ("Unidad/8-10 libra", BaseUnit.POUND, "9"),
+        ("Unidad/3-3.5 lb", BaseUnit.POUND, "3.25"),
+        ("Unidad/ 3 - 4 lb", BaseUnit.POUND, "3.5"),
+        ("Unidad/08 - 10  lb", BaseUnit.POUND, "9"),
         ("Fardo/12 Ud", BaseUnit.UNIT, "12"),
         ("Doc", BaseUnit.UNIT, "12"),
         ("Ud.", BaseUnit.UNIT, "1"),
@@ -189,3 +195,22 @@ def test_different_grades_sizes_or_words_are_different_products(left, right):
 )
 def test_repair_name_restores_enye_exported_as_semicolon(raw, expected):
     assert repair_name(raw) == expected
+
+
+@pytest.mark.parametrize(
+    ("week", "month", "year"),
+    [
+        (w, m, y)
+        for w in ("Primera", "Segunda", "Tercera", "Cuarta", "Quinta")
+        for m, y in (
+            ("Febrero", "2023"),
+            ("Febrero", "2024"),
+            ("Abril", "2023"),
+            ("Agosto", "2023"),
+        )
+    ],
+)
+def test_the_week_number_can_be_read_back_from_the_stored_date(week, month, year):
+    number = ["Primera", "Segunda", "Tercera", "Cuarta", "Quinta"].index(week) + 1
+
+    assert week_of_month(parse_week_date(week, month, year)) == number

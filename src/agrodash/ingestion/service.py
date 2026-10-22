@@ -249,7 +249,7 @@ class _Load:
     def _wholesale_row(self, row_number: int, row: list[object]) -> None:
         # The type column is often damaged (#NAME?, a rubro, blank) on sound rows; only a
         # row that says it belongs to the other report is out of place.
-        if len(row) < WHOLESALE_COLUMNS or not row[0] or _letters(row[2]) == "minorista":
+        if len(row) < WHOLESALE_COLUMNS or _letters(row[2]) == "minorista":
             self._reject(row_number, row, RejectionReason.UNEXPECTED_LAYOUT, "not a wholesale row")
             return
         name, rubro, _, unit_text, amount_cell, week, month, year = row[:WHOLESALE_COLUMNS]
@@ -263,7 +263,7 @@ class _Load:
         )
 
     def _retail_row(self, row_number: int, row: list[object], markets: list[str]) -> None:
-        if len(row) < RETAIL_COLUMNS or not row[0] or _letters(row[2]) == "mayorista":
+        if len(row) < RETAIL_COLUMNS or _letters(row[2]) == "mayorista":
             self._reject(row_number, row, RejectionReason.UNEXPECTED_LAYOUT, "not a retail row")
             return
         cells = [
@@ -295,6 +295,10 @@ class _Load:
         if not amounts:
             return
         name, rubro, unit_text, week, month, year = fields
+        if not str(name).strip():
+            detail = "prices without a product name"
+            self._reject(row_number, row, RejectionReason.UNEXPECTED_LAYOUT, detail)
+            return
         try:
             observed_on = parse_week_date(week, month, year)
         except InvalidValue as error:

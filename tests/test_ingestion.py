@@ -379,10 +379,13 @@ def test_rows_without_a_name_or_too_short_are_rejected_not_repaired(session):
         "Papa;Raices-Tuberculos;Mayorista;Quintal;1500;Primera;Agosto;2017",
         ";Raices-Tuberculos;Mayorista;Quintal;1200;Primera;Agosto;2017",
         "Yuca;Raices-Tuberculos;Mayorista;Quintal;1200",
+        ";Raices-Tuberculos;Mayorista;;;Quinta;Noviembre;2023",
         "Batata;Raices-Tuberculos;Mayorista;Quintal;1100;Primera;Agosto;2017",
     )
 
     run = load(session, "mayorista.csv", content)
 
+    # A row with neither name nor price has nothing to load: a missing value, not an error.
     assert reasons(run) == {RejectionReason.UNEXPECTED_LAYOUT: 2}
+    assert run.values_missing == 1
     assert sorted(product.name for product in session.query(Product)) == ["Batata", "Papa"]
