@@ -85,5 +85,4 @@ class Market(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     name: Mapped[str] = mapped_column(String(120), unique=True)
     kind: Mapped[MarketKind] = mapped_column(enum_column(MarketKind, "market_kind"))
-    location: Mapped[str | None] = mapped_column(String(120))
     is_active: Mapped[bool] = mapped_column(default=True)
