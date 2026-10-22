@@ -51,7 +51,7 @@ y, a continuación, el pronóstico:
 uv run agrodash forecast
 ```
 
-Volver a cargar un archivo ya cargado no hace nada, así que es seguro ejecutarla más seguido. El pronóstico tarda unos 4 minutos porque vuelve a medir los modelos alternativos contra el último precio; `--skip-benchmark` lo hace en segundos.
+Volver a cargar un archivo ya cargado no hace nada, así que es seguro ejecutarla más seguido. El pronóstico tarda entre 4 y 5 minutos porque vuelve a medir los modelos alternativos contra el último precio; `--skip-benchmark` lo hace en segundos.
 
 ## 6. Copias de seguridad
 

@@ -15,8 +15,9 @@ import pandas as pd
 from agrodash.forecasting.series import SEASON_LENGTH
 
 HORIZON = 4
-# One year of report periods. With it the 95% range held 96.0% of later prices and the
-# 80% range 86.7%; shorter histories under-cover the 95% range.
+# One year of report periods. Over six backtest windows the 80% range held 75.9-87.7% of
+# later prices (about 82.5% on average) and the 95% range 90.6-96.2% (about 93.4%).
+# Shorter histories cover less; longer ones are wider without covering much more.
 INTERVAL_HISTORY = SEASON_LENGTH
 LEVELS = {80: (0.10, 0.90), 95: (0.025, 0.975)}
 SELECTED_MODEL = "Naive"

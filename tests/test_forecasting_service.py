@@ -155,3 +155,30 @@ def test_a_run_without_ready_series_succeeds_with_nothing_to_forecast(session):
 
     assert (run.status, run.series_count) == (ForecastStatus.SUCCEEDED, 0)
     assert session.query(Forecast).count() == 0
+
+
+def test_a_new_run_closes_runs_left_running_by_a_killed_job(session):
+    stale = ForecastRun(model_version="old", horizon=4, status=ForecastStatus.RUNNING)
+    session.add(stale)
+    session.commit()
+
+    run_forecasts(session)
+
+    session.refresh(stale)
+    assert (stale.status, stale.error) == (ForecastStatus.FAILED, "Interrupted before it finished")
+    assert stale.finished_at is not None
+
+
+def test_failure_messages_keep_only_the_first_line(session, ready_series, monkeypatch):
+    def broken(*_, **__):
+        raise RuntimeError(
+            "database refused the insert\n[SQL: INSERT INTO forecasts ...]\n[parameters: ...]"
+        )
+
+    monkeypatch.setattr(service, "forecast_all", broken)
+
+    with pytest.raises(ForecastError) as raised:
+        run_forecasts(session)
+
+    assert str(raised.value) == "RuntimeError: database refused the insert"
+    assert session.query(ForecastRun).one().error == "RuntimeError: database refused the insert"

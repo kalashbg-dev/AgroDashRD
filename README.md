@@ -32,7 +32,7 @@ The migration runs in phases (F0 to F6); progress is tracked in [odd/tasks/agrod
 
 ### For Professionals 📊
 - **Value Chain Analysis**: Track product flow.
-- **Price Forecasts**: ML-powered price predictions.
+- **Price Forecasts**: next-month price with an 80% and 95% range, checked every run against statistical and machine-learning models.
 - **Statistical Analysis**: In-depth metrics.
 
 ## Getting Started
@@ -75,7 +75,7 @@ Settings are read from `AGRODASH_*` environment variables or `.env` (see [.env.e
 - Rows that cannot be trusted are kept in quarantine with a reason instead of being loaded: unreadable date or price, unit without a size, unit that does not match its series, or a second price for the same week. `N/D`, blank and `0` cells are missing values, not errors.
 - `agrodash quality-report` summarizes the data: rejections by reason, unreviewed name aliases, products that look renamed between reports (for an admin to confirm), and which series are ready to forecast (at least 104 weeks, 75% of weeks 1-4 covered, a price in the last 8 weeks). `--series-csv FILE` exports every series with its coverage.
 - Technicians report field prices; they stay pending until an admin validates them, and reports more than 50% away from the recent official median are flagged.
-- `agrodash forecast` forecasts the next four report periods of every series ready to forecast. The forecast is the last price, with 80% and 95% ranges from how the series moved over the last year; a backtest on the official history showed that one month ahead nothing beat the last price (selecting AutoETS, Theta or gradient boosting per series was worse on unseen periods). Each run re-measures those models against it and stores the scores, so a change would show. `--skip-benchmark` runs in seconds instead of minutes. Series that are not ready get no forecast ("sin pronóstico").
+- `agrodash forecast` forecasts the next four report periods of every series ready to forecast. The forecast is the last price, with 80% and 95% ranges from how the series moved over the last year (in backtests they held about 82% and 93% of later prices); a backtest on the official history showed that one month ahead nothing beat the last price (selecting AutoETS, Theta or gradient boosting per series was worse on unseen periods). Each run re-measures those models against it and stores the scores, so a change would show. `--skip-benchmark` runs in seconds instead of minutes. Series that are not ready get no forecast ("sin pronóstico").
 - Loading the same file again does nothing. Another export of the same report (for example the `.csv` of an `.xlsx`) only adds prices that are not stored yet. A failed load is recorded with its error and can be retried.
 
 Reading prices and forecasts needs no account. Accounts exist for people who report prices (TECNICO), manage data (ADMIN) or own the platform (SUPERADMIN). Passwords are hashed with Argon2id, and five failed logins lock an account for 15 minutes.

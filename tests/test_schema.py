@@ -261,7 +261,8 @@ def test_dropping_market_location_works_on_a_database_with_prices(tmp_path):
     with engine.begin() as connection:
         connection.execute(
             text(
-                "INSERT INTO markets (id, name, kind, is_active) VALUES (1, 'Mercado Nuevo', 'retail', 1);"
+                "INSERT INTO markets (id, name, kind, is_active)"
+                " VALUES (1, 'Mercado Nuevo', 'retail', 1);"
             )
         )
         connection.execute(
@@ -272,12 +273,14 @@ def test_dropping_market_location_works_on_a_database_with_prices(tmp_path):
         )
         connection.execute(
             text(
-                "INSERT INTO units (id, code, label, base_unit, factor) VALUES (1, '1-lb', '1 lb', 'lb', 1);"
+                "INSERT INTO units (id, code, label, base_unit, factor)"
+                " VALUES (1, '1-lb', '1 lb', 'lb', 1);"
             )
         )
         connection.execute(
             text(
-                "INSERT INTO prices (product_id, market_id, unit_id, observed_on, price_type, source,"
+                "INSERT INTO prices (product_id, market_id, unit_id, observed_on, price_type,"
+                " source,"
                 " status, amount, price_per_base_unit, is_outlier)"
                 " VALUES (1, 1, 1, '2026-09-01', 'retail', 'official', 'validated', 10, 10, 0);"
             )

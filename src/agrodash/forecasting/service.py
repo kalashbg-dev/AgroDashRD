@@ -4,6 +4,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from importlib.metadata import version
 
+from sqlalchemy import update
 from sqlalchemy.orm import Session
 
 from agrodash.forecasting.engine import HORIZON, SELECTED_MODEL, benchmark, forecast_all
@@ -28,6 +29,17 @@ def run_forecasts(session: Session, run_benchmark: bool = True) -> ForecastRun:
     Series that are not ready (too short, too sparse, stale or retired) get no forecast:
     the app shows them as "sin pronóstico".
     """
+    # A job killed mid-run never records its end; the weekly job runs one at a time, so
+    # any run still marked running when a new one starts was interrupted.
+    session.execute(
+        update(ForecastRun)
+        .where(ForecastRun.status == ForecastStatus.RUNNING)
+        .values(
+            status=ForecastStatus.FAILED,
+            error="Interrupted before it finished",
+            finished_at=datetime.now(UTC),
+        )
+    )
     run = ForecastRun(model_version=MODEL_VERSION, horizon=HORIZON)
     session.add(run)
     session.commit()
@@ -43,7 +55,9 @@ def run_forecasts(session: Session, run_benchmark: bool = True) -> ForecastRun:
         session.commit()
     except Exception as error:
         session.rollback()
-        message = f"{error.__class__.__name__}: {error}"
+        # Only the first line: database errors append the SQL and its parameters.
+        lines = str(error).splitlines()
+        message = f"{error.__class__.__name__}: {lines[0] if lines else ''}"
         run.status = ForecastStatus.FAILED
         run.error = message[:500]
         run.finished_at = datetime.now(UTC)
