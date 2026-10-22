@@ -68,4 +68,5 @@ Route evidence: phases depend on each other (no independent parallel units), so 
   - The scan found weight-range units ("Unidad/8-10 libra", ~150 rows), which were read as the upper bound and understated the price per pound by up to 20%. They now use the midpoint.
   - A row with neither name nor price counts as a missing value; a row with prices but no name is rejected.
   - Real data: 290,162 prices, 54 units, 475 series ready.
+- L19 (T3g review): review of f8b1e89..008be14 approved and acknowledged. The short-row guard and the empty-name rule are pinned by tests in 5b3d902; removing the guard makes the test fail with IndexError. Deployment note for F6: any database loaded before 008be14 keeps the old upper-bound factors for weight-range units, because unit aliases are cached by raw text. Build production from an empty database with `alembic upgrade head` and `agrodash ingest --drive`. Only scratch databases exist today. 258 passed.
 - L3: plan approved; data-quality gate added to S4/S5. Engram mirror pending: `mem_current_project` is ambiguous from `~/Downloads` (agrodashrd vs another repo).
