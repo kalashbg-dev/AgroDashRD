@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import date
 
 import pandas as pd
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from agrodash.catalog.models import BaseUnit, Unit
@@ -54,6 +54,9 @@ class TrainingData:
     calendar: list[Period]
     # Periods filled by linear interpolation, per series.
     imputed: dict[str, int]
+    # Index in `calendar` of the latest period any official price was published for;
+    # the calendar's padded weeks after it have not happened yet.
+    latest: int | None
 
 
 def period_of(day: date) -> Period:
@@ -156,4 +159,8 @@ def load_training_data(session: Session, keys: Iterable[SeriesKey]) -> TrainingD
         if frames
         else pd.DataFrame(columns=["unique_id", "ds", "y"])
     )
-    return TrainingData(frame=frame, keys=keys, calendar=calendar, imputed=imputed)
+    published = session.scalar(
+        select(func.max(Price.observed_on)).where(Price.source == PriceSource.OFFICIAL)
+    )
+    latest = position[period_of(published)] if published else None
+    return TrainingData(frame=frame, keys=keys, calendar=calendar, imputed=imputed, latest=latest)

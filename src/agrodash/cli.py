@@ -1,6 +1,7 @@
 import argparse
 import csv
 import getpass
+import statistics
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -11,6 +12,7 @@ from sqlalchemy.orm import Session
 
 from agrodash.accounts.models import Role
 from agrodash.accounts.service import AccountError, create_user
+from agrodash.forecasting.service import ForecastError, run_forecasts
 from agrodash.infra.db import create_db_engine
 from agrodash.infra.settings import get_settings
 from agrodash.ingestion import quality
@@ -48,6 +50,16 @@ def main(argv: list[str] | None = None) -> int:
         "--series-csv", type=Path, help="also write every series with its coverage to this file"
     )
 
+    forecast_help = "forecast every series ready to forecast and store the run"
+    forecast = commands.add_parser(
+        "forecast", help=forecast_help, description=_sentence(forecast_help)
+    )
+    forecast.add_argument(
+        "--skip-benchmark",
+        action="store_true",
+        help="do not re-measure the other models against the last price (much faster)",
+    )
+
     args = parser.parse_args(argv)
     if args.command == "ingest" and not (args.files or args.drive):
         ingest.error("give files to load or --drive")
@@ -56,6 +68,8 @@ def main(argv: list[str] | None = None) -> int:
             return _create_admin(args)
         if args.command == "quality-report":
             return _quality_report(args)
+        if args.command == "forecast":
+            return _forecast(args)
         return _ingest(args)
     except ValidationError as error:
         # Only the messages: pydantic's full report would echo the database URL and its password.
@@ -197,6 +211,34 @@ def _quality_report(args: argparse.Namespace) -> int:
             return 1
         print(f"Wrote {len(report.series)} series to {args.series_csv}")
     return 0
+
+
+def _forecast(args: argparse.Namespace) -> int:
+    engine = create_db_engine(get_settings().database_url)
+    with Session(engine) as session:
+        try:
+            run = run_forecasts(session, run_benchmark=not args.skip_benchmark)
+        except ForecastError as error:
+            print(f"error: forecast run failed: {error}", file=sys.stderr)
+            return 1
+        not_ready = sum(not series.ready for series in quality.series_coverage(session))
+        print(
+            f"Forecast {run.series_count} series for {run.horizon} report periods (run {run.id}); "
+            f"{not_ready} series not ready: sin pronóstico"
+        )
+        medians = _median_mase(run)
+        if medians:
+            listed = ", ".join(f"{model} {mase:.2f}" for model, mase in medians)
+            print(f"Benchmark median MASE (below 1 beats the series' one-step naive): {listed}")
+    engine.dispose()
+    return 0
+
+
+def _median_mase(run) -> list[tuple[str, float]]:
+    by_model: dict[str, list[float]] = {}
+    for evaluation in run.evaluations:
+        by_model.setdefault(evaluation.model, []).append(evaluation.mase)
+    return [(model, statistics.median(values)) for model, values in by_model.items()]
 
 
 if __name__ == "__main__":

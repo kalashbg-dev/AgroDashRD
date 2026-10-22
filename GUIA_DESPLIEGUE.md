@@ -45,7 +45,13 @@ Programá una tarea semanal (cron del servidor o "cron job" del proveedor) que e
 uv run agrodash ingest --drive
 ```
 
-Volver a cargar un archivo ya cargado no hace nada, así que es seguro ejecutarla más seguido. El job de pronósticos (`agrodash forecast`) se agregará a esta tarea al cerrar F4.
+y, a continuación, el pronóstico:
+
+```bash
+uv run agrodash forecast
+```
+
+Volver a cargar un archivo ya cargado no hace nada, así que es seguro ejecutarla más seguido. El pronóstico tarda unos 4 minutos porque vuelve a medir los modelos alternativos contra el último precio; `--skip-benchmark` lo hace en segundos.
 
 ## 6. Copias de seguridad
 

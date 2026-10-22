@@ -29,10 +29,10 @@ Assumption: the wholesale CSV belongs to "Mercado Nuevo" (legacy assumption) unt
 | T3e | S4 | inline | done (718a54a, follow-up fixes) | data-quality report (`agrodash quality-report`), full history load evidence, docs |
 | T3f | S4 | inline | done (f410bcd, 1ef7e5c, 483f58c, follow-up) | rejected-rows audit fixes (L13-L16) |
 | T3g | S4 | inline | done | week semantics, range units, name-less rows (L17-L18) |
-| T4a | S5 | inline | pending | series builder: report-period calendar, ready series, gap interpolation, future period slots |
-| T4b | S5 | inline | pending | backtest and per-series model selection (MASE), fit and predict with intervals |
-| T4c | S5 | inline | pending | schema: forecast_runs, series evaluations, forecasts (migration, own commit) |
-| T4d | S5 | inline | pending | `agrodash forecast` batch job storing results; series without forecast listed as "sin pronóstico"; docs |
+| T4a | S5 | inline | done (3e61e50) | series builder: report-period calendar, ready series, gap interpolation, future period slots |
+| T4b | S5 | inline | done | last-price forecast with calibrated ranges and a per-run benchmark (user decision L24) |
+| T4c | S5 | inline | done (52901da) | schema: forecast_runs, series evaluations, forecasts (migration, own commit) |
+| T4d | S5 | inline | done | `agrodash forecast` batch job storing results; series without forecast listed as "sin pronóstico"; docs |
 | T5 | S6 | inline | pending | |
 | T6 | S7 | inline | pending | |
 
@@ -82,4 +82,6 @@ Route evidence: phases depend on each other (no independent parallel units), so 
   - legacy/ and the outdated guides were deleted, GUIA_DESPLIEGUE.md rewritten and the historical docs marked (e4f43e6).
   278 passed.
 - L22 (T4 backtest): the first full run (6 models x 475 series, n_jobs=-1) ran over 30 minutes because macOS spawned worker processes that recompiled numba again and again; it was stopped. On a 60-series sample with n_jobs=1, the median MASE (h=4, 6 windows) was Naive 1.162, Theta 1.256, AutoARIMA 1.271, AutoETS 1.297, GBM 1.386, AutoTheta(54) 1.411 and SeasonalNaive(54) 2.721. AutoARIMA took 237 s for 60 series (about 31 min for 475) and won few series, so it was dropped. Yearly seasonality on the period axis does not help, so the seasonal models were dropped too. A per-series best beat Naive in only 52% of series. A holdout selection experiment is running on all 475 series: select on 4 windows, test on 2, comparing always-Naive with selection with and without a margin over Naive.
+- L23 (T4 holdout): the model was selected on 4 windows and tested on 2 unseen windows over all 475 series. Holdout median MASE: always Naive 1.063; best-per-series 1.125; best only when it beats Naive by 5% 1.093, by 10% 1.087, by 15% 1.086. Single models: Naive 1.063, GBM 1.234, AutoETS 1.279, Theta 1.285. When the selection picked another model, it beat Naive in only 5-9% of series: the per-series "best model" is noise. Ratio-quantile ranges were checked on unseen windows: with 1 year of history (54 periods) the 95% range held 96.0% of prices and the 80% range 86.7%; with 6 months the 95% range held 92.6%; with 2-5 years the ranges were wider (80% range held 88-91%).
+- L24 (2026-10-22, user decision via AskUserQuestion): "Último precio + rango (Recomendado)": the forecast is the last price, with 80% and 95% ranges from one year of ratio quantiles. Each run re-measures AutoETS, Theta and GBM against it and stores their MASE. This replaces the S5 per-series selection. The ranges are widened to contain the forecast (otherwise a series that only rose showed a range above its own forecast). Forecasts target the 4 periods after the latest published report, and the range of a series whose last price is older spans gap + step. Real run: 475 series forecast for 2026-10-01..2026-10-22 and 1,727 not ready; 4 min with the benchmark (median MASE Naive 0.96, AutoETS 1.16, GBM 1.16, Theta 1.18), 12 s with --skip-benchmark. 293 passed.
 - L3: plan approved; data-quality gate added to S4/S5. Engram mirror pending: `mem_current_project` is ambiguous from `~/Downloads` (agrodashrd vs another repo).
