@@ -149,6 +149,9 @@ def _ingest_one(session: Session, file_name: str, content: bytes, trigger) -> bo
     return True
 
 
+SHOWN_NAMES = 20
+
+
 def _quality_report(args: argparse.Namespace) -> int:
     engine = create_db_engine(get_settings().database_url)
     with Session(engine) as session:
@@ -174,14 +177,24 @@ def _quality_report(args: argparse.Namespace) -> int:
         f"(at least {quality.MIN_WEEKS} weeks, {quality.MIN_COVERAGE:.0%} of weeks 1-4 "
         f"covered, a price in the last {quality.MAX_STALENESS.days // 7} weeks)"
     )
+    print(f"Unreviewed names ({len(report.unreviewed_aliases)}):")
+    for raw_name, product in report.unreviewed_aliases[:SHOWN_NAMES]:
+        print(f"  {raw_name} -> {product}")
+    if len(report.unreviewed_aliases) > SHOWN_NAMES:
+        print(f"  ... and {len(report.unreviewed_aliases) - SHOWN_NAMES} more")
     print(f"Possible renamed products: {len(report.rename_candidates)}")
     for old, new, days in report.rename_candidates:
         print(f"  {old} -> {new} ({days} days later)")
     if args.series_csv:
-        with args.series_csv.open("w", newline="", encoding="utf-8") as file:
-            writer = csv.DictWriter(file, fieldnames=list(quality.SeriesCoverage.__annotations__))
-            writer.writeheader()
-            writer.writerows(asdict(series) for series in report.series)
+        try:
+            with args.series_csv.open("w", newline="", encoding="utf-8") as file:
+                fields = list(quality.SeriesCoverage.__annotations__)
+                writer = csv.DictWriter(file, fieldnames=fields)
+                writer.writeheader()
+                writer.writerows(asdict(series) for series in report.series)
+        except OSError as error:
+            print(f"error: cannot write {args.series_csv}: {error.strerror}", file=sys.stderr)
+            return 1
         print(f"Wrote {len(report.series)} series to {args.series_csv}")
     return 0
 

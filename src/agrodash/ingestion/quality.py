@@ -85,17 +85,22 @@ def build_report(session: Session) -> QualityReport:
         ],
         units=session.scalar(select(func.count(Unit.id))),
         latest_observation=latest,
-        series=_series(session, latest),
+        series=_series(session),
         rename_candidates=_rename_candidates(session),
     )
 
 
 def _rejections(session: Session) -> dict[str, int]:
-    """Rejections of the loads that succeeded; failed loads stored nothing."""
+    """Rejections of the latest successful load of each report type. Another export of
+    the same report quarantines the same rows again, so older loads would count twice."""
+    latest_runs = (
+        select(func.max(IngestionRun.id))
+        .where(IngestionRun.status == IngestionStatus.SUCCEEDED)
+        .group_by(IngestionRun.layout)
+    )
     rows = session.execute(
         select(QuarantinedRow.reason, func.count())
-        .join(IngestionRun)
-        .where(IngestionRun.status == IngestionStatus.SUCCEEDED)
+        .where(QuarantinedRow.run_id.in_(latest_runs))
         .group_by(QuarantinedRow.reason)
         .order_by(QuarantinedRow.reason)
     )
@@ -130,10 +135,20 @@ def _rename_candidates(session: Session) -> list[tuple[str, str, int]]:
 
 def _similarity(left: str, right: str) -> float:
     left_words, right_words = set(name_key(left).split()), set(name_key(right).split())
+    if not left_words | right_words:
+        return 0.0
     return len(left_words & right_words) / len(left_words | right_words)
 
 
-def _series(session: Session, latest: date | None) -> list[SeriesCoverage]:
+def _series(session: Session) -> list[SeriesCoverage]:
+    # Wholesale and retail reports may end on different dates; compare within each type.
+    latest_by_type = dict(
+        session.execute(
+            select(Price.price_type, func.max(Price.observed_on))
+            .where(Price.source == PriceSource.OFFICIAL)
+            .group_by(Price.price_type)
+        ).all()
+    )
     counted = extract("day", Price.observed_on) <= LAST_COUNTED_DAY
     rows = session.execute(
         select(
@@ -166,7 +181,7 @@ def _series(session: Session, latest: date | None) -> list[SeriesCoverage]:
                 coverage=coverage,
                 ready=weeks >= MIN_WEEKS
                 and coverage >= MIN_COVERAGE
-                and latest - last_on <= MAX_STALENESS,
+                and latest_by_type[price_type] - last_on <= MAX_STALENESS,
             )
         )
     return series

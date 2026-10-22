@@ -221,7 +221,7 @@ def parse_amount(value: object) -> Decimal | None:
 
 
 def _parse_decimal_text(text: str) -> Decimal:
-    if "," in text and "." in text or re.fullmatch(r"\d{1,3}(,\d{3})+", text):
+    if "," in text and "." in text or re.fullmatch(r"[1-9]\d{0,2}(,\d{3})+", text):
         text = text.replace(",", "")
     else:
         text = text.replace(",", ".")

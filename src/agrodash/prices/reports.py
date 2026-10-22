@@ -95,7 +95,6 @@ def review_report(session: Session, reviewer: User, price_id: int, *, approve: b
         .execution_options(synchronize_session=False)
     )
     if reviewed.rowcount != 1:
-        session.rollback()
         raise ReportError("This price is not a pending field report")
     session.commit()
     return session.get(Price, price_id)

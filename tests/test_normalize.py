@@ -54,6 +54,8 @@ def test_unreadable_dates_are_invalid(week, month, year):
         (" 11,500.00 ", Decimal("11500.00")),
         ("8,5", Decimal("8.5")),
         ("21", Decimal("21")),
+        ("0,001", Decimal("0.001")),
+        ("1,500", Decimal("1500")),
     ],
 )
 def test_amounts_accept_numbers_and_spanish_or_english_separators(raw, expected):

@@ -145,3 +145,40 @@ def test_renamed_products_are_suggested_for_review(session):
     assert report.rename_candidates == [
         ("Cilantro/ (Long Standing)/ grande/ primera", "Cilantro (Long Standing)/ primera", 7)
     ]
+
+
+def test_rejections_count_only_the_latest_load_of_each_report_type(session):
+    for name in ("minorista.csv", "minorista.xls", "mayorista.csv"):
+        ingest_file(session, (FIXTURES / name).read_bytes(), name, IngestionTrigger.FILE)
+
+    rejections = build_report(session).rejections
+
+    assert rejections["invalid_price"] == 2
+    assert sum(rejections.values()) == 7
+
+
+def test_staleness_is_measured_within_each_price_type(session, monkeypatch):
+    monkeypatch.setattr(quality, "MIN_WEEKS", 8)
+    add_series(session, "Retail", {(2026, m): [1, 2, 3, 4] for m in (7, 8, 9)})
+    add_series(
+        session, "Wholesale", {(2026, m): [1, 2, 3, 4] for m in (3, 4, 5)}, PriceType.WHOLESALE
+    )
+
+    ready = {series.product: series.ready for series in build_report(session).series}
+
+    assert ready == {"Retail": True, "Wholesale": True}
+
+
+def test_quality_report_lists_unreviewed_names_and_reports_bad_export_paths(
+    cli_database, tmp_path, capsys
+):
+    cli.main(["ingest", str(FIXTURES / "mayorista.csv")])
+    capsys.readouterr()
+
+    exit_code = cli.main(["quality-report", "--series-csv", str(tmp_path / "missing" / "s.csv")])
+
+    captured = capsys.readouterr()
+    assert exit_code == 1
+    assert "Unreviewed names (3):" in captured.out
+    assert "  cilantro long standing primera -> Cilantro (Long Standing), primera" in captured.out
+    assert "error: cannot write" in captured.err

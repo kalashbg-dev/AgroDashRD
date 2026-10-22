@@ -263,3 +263,15 @@ def test_excel_error_cells_are_rejected_not_read_as_prices(session):
         "Mercado Nuevo: unreadable price '#REF!'",
         "Supermercado: unreadable price '#DIV/0!'",
     ]
+
+
+def test_new_products_take_the_most_common_rubro(session):
+    rows = [
+        "Leche (Líquida);Avicolas;Mayorista;Fardo/12 Ud;900;Primera;Agosto;2017",
+        "Leche (Líquida);Lacteos;Mayorista;Fardo/12 Ud;910;Segunda;Agosto;2017",
+        "Leche (Líquida);Lateos;Mayorista;Fardo/12 Ud;920;Tercera;Agosto;2017",
+    ]
+
+    load(session, "mayorista.csv", "\r\n".join(rows).encode("latin-1"))
+
+    assert session.query(Product).one().category == "Lacteos"

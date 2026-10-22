@@ -260,8 +260,13 @@ class _Load:
             )
 
     def _store(self) -> None:
+        # New products take what most of their rows say, not whatever the first row says.
         default_units = _majority(
             (name_key(observation.raw_name), observation.unit.base_unit)
+            for observation in self.observations
+        )
+        categories = _majority(
+            (name_key(observation.raw_name), observation.category)
             for observation in self.observations
         )
         resolved = [
@@ -269,7 +274,7 @@ class _Load:
                 observation,
                 self.resolver.product(
                     observation.raw_name,
-                    observation.category,
+                    categories[name_key(observation.raw_name)],
                     default_units[name_key(observation.raw_name)],
                 ),
                 self.resolver.market(observation.market_name, observation.market_kind),
