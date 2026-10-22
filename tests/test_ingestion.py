@@ -194,3 +194,72 @@ def test_a_failed_file_can_be_loaded_again_after_fixing_the_cause(session, monke
         IngestionStatus.FAILED,
         IngestionStatus.SUCCEEDED,
     ]
+
+
+RETAIL_HEADER = (
+    "Productos;Rubro;Categoria;Unidad;Mercado Nuevo;Mercado Conaprope;Mercado Los Mina;"
+    "Mercado Villa Consuelo;Mercado Cristo Rey;Mercadom;Supermercado;Semana;Mes;Año\r\n"
+)
+
+
+def test_rows_rejected_counts_rows_not_cells(session):
+    content = (
+        RETAIL_HEADER + "Arroz;Cereal;Minorista;lb;-1;-2;30;N/D;N/D;N/D;N/D;Primera;Agosto;2017\r\n"
+    )
+
+    run = load(session, "minorista.csv", content.encode("latin-1"))
+
+    assert (run.prices_loaded, run.rows_rejected, len(run.quarantined_rows)) == (1, 1, 2)
+
+
+def test_a_short_retail_header_fails_with_a_clear_message(session):
+    content = "Productos;Rubro;Categoria;Unidad;Mercado Nuevo\r\nArroz;Cereal;Minorista;lb;20\r\n"
+
+    with pytest.raises(IngestionError, match="retail header needs 7 market columns"):
+        load(session, "minorista.csv", content.encode())
+
+
+def test_a_file_where_no_row_loads_fails_and_can_be_retried(session):
+    content = b"Arroz;Cereal;Mayorista;Saco;100;Primera;Agosto;2017\r\n"
+
+    with pytest.raises(IngestionError, match="No row could be loaded"):
+        load(session, "mayorista.csv", content)
+
+    run = session.query(IngestionRun).one()
+    assert run.status is IngestionStatus.FAILED
+    assert session.query(Product).count() == 0
+
+
+def test_a_failure_mid_load_stores_nothing_but_the_failed_run(session, monkeypatch):
+    def broken_market(*_):
+        raise RuntimeError("disk full")
+
+    monkeypatch.setattr("agrodash.catalog.resolver.CatalogResolver.market", broken_market)
+
+    with pytest.raises(IngestionError, match="Unexpected error: RuntimeError: disk full"):
+        load(session, "mayorista.csv")
+
+    assert session.query(IngestionRun).one().status is IngestionStatus.FAILED
+    assert (session.query(Price).count(), session.query(Product).count()) == (0, 0)
+
+
+def test_workbooks_that_unpack_too_large_are_refused(session, monkeypatch):
+    workbook = openpyxl.Workbook()
+    workbook.active.append(["x" * 1000])
+    content = io.BytesIO()
+    workbook.save(content)
+    monkeypatch.setattr("agrodash.ingestion.readers.MAX_UNPACKED_BYTES", 1000)
+
+    with pytest.raises(IngestionError, match="too large when unpacked"):
+        load(session, "mayorista.xlsx", content.getvalue())
+
+
+def test_excel_error_cells_are_rejected_not_read_as_prices(session):
+    run = load(session, "errores.xls")
+
+    assert (run.prices_loaded, run.rows_rejected) == (1, 1)
+    details = sorted(row.detail for row in run.quarantined_rows)
+    assert details == [
+        "Mercado Nuevo: unreadable price '#REF!'",
+        "Supermercado: unreadable price '#DIV/0!'",
+    ]

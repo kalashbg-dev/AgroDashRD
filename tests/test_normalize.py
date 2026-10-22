@@ -65,7 +65,7 @@ def test_missing_amounts_are_none(raw):
     assert parse_amount(raw) is None
 
 
-@pytest.mark.parametrize("raw", ["abc", "-5", "1.2.3"])
+@pytest.mark.parametrize("raw", ["abc", "-5", "1.2.3", "NaN", "inf", float("nan"), float("inf")])
 def test_unreadable_or_negative_amounts_are_invalid(raw):
     with pytest.raises(InvalidValue):
         parse_amount(raw)
@@ -113,7 +113,10 @@ def test_unit_code_and_label_are_shared_by_containers_of_the_same_size():
     assert sack.label == "100 lb"
 
 
-@pytest.mark.parametrize("raw", ["Saco", "0", "", "N/D", "N/A", "Saco/1N/DN/D lb", "2800"])
+@pytest.mark.parametrize(
+    "raw",
+    ["Saco", "0", "", "N/D", "N/A", "Saco/1N/DN/D lb", "2800", "Saco/0 lb", "Huacal/0.00001 lb"],
+)
 def test_units_without_a_known_size_are_unknown(raw):
     assert parse_unit(raw) is None
 

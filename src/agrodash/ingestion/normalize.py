@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
 from difflib import SequenceMatcher
-from functools import cache
+from functools import lru_cache
 
 from agrodash.catalog.models import BaseUnit
 
@@ -137,7 +137,7 @@ def fold(text: object) -> str:
     return " ".join(without_accents.decode().lower().split())
 
 
-@cache
+@lru_cache(maxsize=4096)
 def name_key(name: str) -> str:
     """Key under which spelling variants of the same product name collide."""
     return " ".join(re.sub(r"[^a-z0-9]+", " ", fold(name)).split())
@@ -167,7 +167,7 @@ def same_product_name(left_key: str, right_key: str) -> bool:
     return SequenceMatcher(None, a, b).ratio() >= 0.8
 
 
-@cache
+@lru_cache(maxsize=4096)
 def parse_week_date(week: object, month: object, year: object) -> date:
     """Date for "week N of month": day 1 + 7*(N-1), never past the month's end."""
     week_number = WEEK_PREFIXES.get(fold(week)[:3])
@@ -211,6 +211,8 @@ def parse_amount(value: object) -> Decimal | None:
         if text.lower() in MISSING_TEXT:
             return None
         amount = _parse_decimal_text(text)
+    if not amount.is_finite():
+        raise InvalidValue(f"unreadable price {value!r}")
     if amount == 0:
         return None
     if amount < 0:
@@ -229,7 +231,7 @@ def _parse_decimal_text(text: str) -> Decimal:
         raise InvalidValue(f"unreadable price {text!r}") from error
 
 
-@cache
+@lru_cache(maxsize=4096)
 def parse_unit(text: object) -> ParsedUnit | None:
     """Base unit and size of a selling unit label, or None when it cannot be known.
 
@@ -251,15 +253,17 @@ def parse_unit(text: object) -> ParsedUnit | None:
     return None
 
 
-def _unit(base_unit: BaseUnit, factor: Decimal) -> ParsedUnit:
-    return ParsedUnit(base_unit, factor.quantize(FACTOR_PLACES))
+def _unit(base_unit: BaseUnit, factor: Decimal) -> ParsedUnit | None:
+    factor = factor.quantize(FACTOR_PLACES)
+    # "Saco/0 lb" is a typo, not a size; dividing by it would be meaningless.
+    return ParsedUnit(base_unit, factor) if factor > 0 else None
 
 
 def _plain(number: Decimal) -> str:
     return f"{number.normalize():f}"
 
 
-@cache
+@lru_cache(maxsize=4096)
 def normalize_category(rubro: object) -> str:
     letters = _letters(fold(rubro).replace(" y ", " "))
     best_score, best = max((_typo_similarity(letters, _letters(c)), c) for c in CATEGORIES)

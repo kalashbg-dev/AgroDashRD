@@ -2,6 +2,7 @@
 
 import csv
 import io
+import zipfile
 from pathlib import PurePath
 
 import openpyxl
@@ -11,6 +12,8 @@ from agrodash.ingestion.models import SourceLayout
 from agrodash.ingestion.normalize import fold
 
 SUPPORTED_SUFFIXES = (".csv", ".xlsx", ".xls")
+# An .xlsx is a zip archive; refuse ones that would unpack into a memory bomb.
+MAX_UNPACKED_BYTES = 200 * 1024 * 1024
 
 
 class UnreadableFile(ValueError):
@@ -42,6 +45,9 @@ def _read_csv(content: bytes) -> list[list[object]]:
 
 
 def _read_xlsx(content: bytes) -> list[list[object]]:
+    with zipfile.ZipFile(io.BytesIO(content)) as archive:
+        if sum(member.file_size for member in archive.infolist()) > MAX_UNPACKED_BYTES:
+            raise ValueError(f"too large when unpacked (over {MAX_UNPACKED_BYTES // 2**20} MB)")
     # openpyxl parses XML with defusedxml when it is installed (it is a dependency).
     workbook = openpyxl.load_workbook(io.BytesIO(content), read_only=True, data_only=True)
     try:
@@ -52,7 +58,15 @@ def _read_xlsx(content: bytes) -> list[list[object]]:
 
 def _read_xls(content: bytes) -> list[list[object]]:
     sheet = xlrd.open_workbook(file_contents=content).sheet_by_index(0)
-    return [sheet.row_values(index) for index in range(sheet.nrows)]
+    return [[_xls_value(cell) for cell in sheet.row(index)] for index in range(sheet.nrows)]
+
+
+def _xls_value(cell: xlrd.sheet.Cell) -> object:
+    # xlrd gives error cells as their numeric code (#REF! is 23), which would pass as a
+    # price; use the error text instead, as .xlsx and .csv exports show it.
+    if cell.ctype == xlrd.XL_CELL_ERROR:
+        return xlrd.error_text_from_code.get(cell.value, "#ERROR")
+    return cell.value
 
 
 def detect_layout(rows: list[list[object]]) -> SourceLayout:

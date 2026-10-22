@@ -78,11 +78,7 @@ def ingest_file(
 ) -> IngestionRun:
     """Load one report file and return its run (the earlier run if it was already loaded)."""
     digest = sha256(content).hexdigest()
-    loaded = session.scalar(
-        select(IngestionRun).where(
-            IngestionRun.file_sha256 == digest, IngestionRun.status == IngestionStatus.SUCCEEDED
-        )
-    )
+    loaded = _succeeded_run(session, digest)
     if loaded is not None:
         return loaded
 
@@ -103,7 +99,7 @@ def ingest_file(
         session.commit()
     except Exception as error:
         session.rollback()
-        message = _failure_message(error)
+        message = _failure_message(session, error, digest)
         session.add(
             IngestionRun(
                 file_name=file_name[:255],
@@ -121,6 +117,14 @@ def ingest_file(
     return run
 
 
+def _succeeded_run(session: Session, digest: str) -> IngestionRun | None:
+    return session.scalar(
+        select(IngestionRun).where(
+            IngestionRun.file_sha256 == digest, IngestionRun.status == IngestionStatus.SUCCEEDED
+        )
+    )
+
+
 def _read(content: bytes, file_name: str) -> list[list[object]]:
     if len(content) > MAX_FILE_BYTES:
         raise IngestionError(f"{file_name} is larger than {MAX_FILE_BYTES // 2**20} MB")
@@ -133,10 +137,10 @@ def _read(content: bytes, file_name: str) -> list[list[object]]:
     return rows
 
 
-def _failure_message(error: Exception) -> str:
+def _failure_message(session: Session, error: Exception, digest: str) -> str:
     if isinstance(error, IngestionError):
         return str(error)
-    if isinstance(error, IntegrityError):
+    if isinstance(error, IntegrityError) and _succeeded_run(session, digest):
         return "Another run loaded this file at the same time"
     return f"Unexpected error: {error.__class__.__name__}: {error}"
 
@@ -148,14 +152,22 @@ class _Load:
         self.resolver = CatalogResolver(session)
         self.rejections: list[dict] = []
         self.observations: list[_Observation] = []
+        # Observations that passed every check, whether new or already stored.
+        self.accepted = 0
 
     def load(self, rows: list[list[object]]) -> None:
         if self.run.layout is SourceLayout.RETAIL:
+            if len(rows[0]) < RETAIL_COLUMNS:
+                raise IngestionError("The retail header needs 7 market columns before Semana")
             markets = [clean_name(rows[0][column]) for column in RETAIL_MARKET_COLUMNS]
             self._read_rows(rows[1:], 2, lambda n, row: self._retail_row(n, row, markets))
         else:
             self._read_rows(rows, 1, self._wholesale_row)
         self._store()
+        if self.rejections and not self.accepted:
+            # Most likely not a price report, or one in a layout we misread. Failing keeps
+            # the file loadable again instead of marking it done with nothing stored.
+            raise IngestionError("No row could be loaded; check that the file is a price report")
 
     def _read_rows(self, rows, first_line, parse_row) -> None:
         for row_number, row in enumerate(rows, start=first_line):
@@ -255,8 +267,9 @@ class _Load:
             for observation in self.observations
         ]
         self.session.flush()
-        series_units = self._series_base_units(resolved)
-        stored = self._stored_keys()
+        product_ids = {product.id for _, product, _ in resolved}
+        series_units = self._series_base_units(resolved, product_ids)
+        stored = self._stored_keys(product_ids)
         seen = set()
         prices = []
         for observation, product, market in resolved:
@@ -274,14 +287,15 @@ class _Load:
                 detail = f"{product.name} already has a price at {market.name} that week"
                 self._reject_observation(observation, RejectionReason.DUPLICATE_PRICE, detail)
                 continue
-            seen.add(key)
-            if key in stored:
-                continue
             amount = observation.amount.quantize(AMOUNT_PLACES)
             per_base_unit = (observation.amount / unit.factor).quantize(PER_BASE_UNIT_PLACES)
             if amount <= 0 or per_base_unit <= 0:
                 detail = f"{observation.amount} is too small to store"
                 self._reject_observation(observation, RejectionReason.INVALID_PRICE, detail)
+                continue
+            seen.add(key)
+            self.accepted += 1
+            if key in stored:
                 continue
             prices.append(
                 {
@@ -300,9 +314,10 @@ class _Load:
         self._insert(Price, prices)
         self._insert(QuarantinedRow, self.rejections)
         self.run.prices_loaded = len(prices)
-        self.run.rows_rejected = len(self.rejections)
+        # A retail row can have several rejected cells; count each row once.
+        self.run.rows_rejected = len({rejection["row_number"] for rejection in self.rejections})
 
-    def _series_base_units(self, resolved) -> dict[tuple, BaseUnit]:
+    def _series_base_units(self, resolved, product_ids: set[int]) -> dict[tuple, BaseUnit]:
         """Base unit of each (product, price type) series: what stored prices use, else
         what most rows of this file use. Wholesale and retail may differ (melons are sold
         by the pound wholesale and by the piece retail), but one series never mixes them.
@@ -310,7 +325,7 @@ class _Load:
         counts = self.session.execute(
             select(Price.product_id, Price.price_type, Unit.base_unit, func.count())
             .join(Unit, Price.unit_id == Unit.id)
-            .where(Price.source == PriceSource.OFFICIAL)
+            .where(Price.source == PriceSource.OFFICIAL, Price.product_id.in_(product_ids))
             .group_by(Price.product_id, Price.price_type, Unit.base_unit)
         )
         stored: dict[tuple, tuple[int, BaseUnit]] = {}
@@ -324,13 +339,15 @@ class _Load:
         )
         return incoming | {key: base_unit for key, (_, base_unit) in stored.items()}
 
-    def _stored_keys(self) -> set[tuple]:
+    def _stored_keys(self, product_ids: set[int]) -> set[tuple]:
         price_type = (
             PriceType.RETAIL if self.run.layout is SourceLayout.RETAIL else PriceType.WHOLESALE
         )
         rows = self.session.execute(
             select(Price.product_id, Price.market_id, Price.observed_on, Price.price_type).where(
-                Price.source == PriceSource.OFFICIAL, Price.price_type == price_type
+                Price.source == PriceSource.OFFICIAL,
+                Price.price_type == price_type,
+                Price.product_id.in_(product_ids),
             )
         )
         return {tuple(row) for row in rows}
