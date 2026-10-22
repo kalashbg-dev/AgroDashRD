@@ -47,6 +47,13 @@ class UnitAlias(Base):
 
 
 class Product(Base):
+    """A product as sold, one per grade and size (e.g. "Arroz Selecto/ primera").
+
+    `base_unit` is the unit of the series that first introduced the product. Each price
+    type keeps its own base unit (melons are priced per pound wholesale and per piece
+    retail); ingestion only enforces that one series never mixes base units.
+    """
+
     __tablename__ = "products"
 
     id: Mapped[int] = mapped_column(primary_key=True)
