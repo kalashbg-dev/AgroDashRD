@@ -5,6 +5,7 @@ from enum import StrEnum
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Numeric, func, text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from agrodash.accounts.models import User
 from agrodash.catalog.models import Market, Product, Unit
 from agrodash.infra.db import Base, enum_column
 
@@ -54,6 +55,8 @@ class Price(Base):
     product_id: Mapped[int] = mapped_column(ForeignKey("products.id"))
     market_id: Mapped[int] = mapped_column(ForeignKey("markets.id"))
     unit_id: Mapped[int] = mapped_column(ForeignKey("units.id"))
+    # Who submitted a field report; official prices have no reporter.
+    reporter_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True)
     observed_on: Mapped[date]
     price_type: Mapped[PriceType] = mapped_column(enum_column(PriceType, "price_type"))
     source: Mapped[PriceSource] = mapped_column(enum_column(PriceSource, "price_source"))
@@ -67,3 +70,4 @@ class Price(Base):
     product: Mapped[Product] = relationship()
     market: Mapped[Market] = relationship()
     unit: Mapped[Unit] = relationship()
+    reporter: Mapped[User | None] = relationship()
