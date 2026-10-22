@@ -372,3 +372,17 @@ def test_a_valid_date_between_rows_of_another_week_is_kept(session):
     yuca = session.query(Price).join(Product).filter(Product.name == "Yuca").one()
     assert yuca.observed_on == date(2017, 8, 8)
     assert run.rows_corrected == 0
+
+
+def test_rows_without_a_name_or_too_short_are_rejected_not_repaired(session):
+    content = wholesale(
+        "Papa;Raices-Tuberculos;Mayorista;Quintal;1500;Primera;Agosto;2017",
+        ";Raices-Tuberculos;Mayorista;Quintal;1200;Primera;Agosto;2017",
+        "Yuca;Raices-Tuberculos;Mayorista;Quintal;1200",
+        "Batata;Raices-Tuberculos;Mayorista;Quintal;1100;Primera;Agosto;2017",
+    )
+
+    run = load(session, "mayorista.csv", content)
+
+    assert reasons(run) == {RejectionReason.UNEXPECTED_LAYOUT: 2}
+    assert sorted(product.name for product in session.query(Product)) == ["Batata", "Papa"]

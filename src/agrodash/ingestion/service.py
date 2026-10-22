@@ -222,6 +222,7 @@ class _Load:
             after = labels[index + 1] if index + 1 < len(labels) else None
             if (
                 any(label)
+                and len(row) > max(date_columns)
                 and before is not None
                 and before == after
                 and label != before
@@ -248,7 +249,7 @@ class _Load:
     def _wholesale_row(self, row_number: int, row: list[object]) -> None:
         # The type column is often damaged (#NAME?, a rubro, blank) on sound rows; only a
         # row that says it belongs to the other report is out of place.
-        if len(row) < WHOLESALE_COLUMNS or _letters(row[2]) == "minorista":
+        if len(row) < WHOLESALE_COLUMNS or not row[0] or _letters(row[2]) == "minorista":
             self._reject(row_number, row, RejectionReason.UNEXPECTED_LAYOUT, "not a wholesale row")
             return
         name, rubro, _, unit_text, amount_cell, week, month, year = row[:WHOLESALE_COLUMNS]
@@ -262,7 +263,7 @@ class _Load:
         )
 
     def _retail_row(self, row_number: int, row: list[object], markets: list[str]) -> None:
-        if len(row) < RETAIL_COLUMNS or _letters(row[2]) == "mayorista":
+        if len(row) < RETAIL_COLUMNS or not row[0] or _letters(row[2]) == "mayorista":
             self._reject(row_number, row, RejectionReason.UNEXPECTED_LAYOUT, "not a retail row")
             return
         cells = [
