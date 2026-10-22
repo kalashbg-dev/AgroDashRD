@@ -55,7 +55,7 @@ def report_price(
         raise ReportError("Price must be greater than zero")
     if observed_on > local_today():
         raise ReportError("The observation date cannot be in the future")
-    series_unit = _series_base_unit(session, product, price_type)
+    series_unit = series_base_unit(session, product, price_type)
     if unit.base_unit != series_unit:
         raise ReportError(
             f"{product.name} {price_type} prices are per {series_unit}; "
@@ -119,7 +119,7 @@ def pending_reports(session: Session) -> list[Price]:
     )
 
 
-def _series_base_unit(session: Session, product: Product, price_type: PriceType) -> BaseUnit:
+def series_base_unit(session: Session, product: Product, price_type: PriceType) -> BaseUnit:
     """Base unit of the latest official price, or the product's when there is no series yet.
 
     Series can change unit over time (pepino retail moved from the pound to the piece),

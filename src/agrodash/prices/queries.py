@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from agrodash.catalog.models import Market, Product, Unit
 from agrodash.prices.models import Price, PriceSource, PriceStatus, PriceType
+from agrodash.prices.reports import series_base_unit
 
 CHANGE_WINDOW = timedelta(weeks=4)
 
@@ -105,3 +106,59 @@ def price_history(
 
 def latest_report_date(session: Session) -> date | None:
     return session.scalar(select(func.max(Price.observed_on)).where(*_published()))
+
+
+@dataclass(frozen=True)
+class Choice:
+    id: int
+    label: str
+
+
+@dataclass(frozen=True)
+class ReportRow:
+    product: str
+    market: str
+    observed_on: date
+    amount: Decimal
+    unit: str
+    status: str
+    is_outlier: bool
+
+
+def units_for_report(session: Session, product_id: int, price_type: PriceType) -> list[Choice]:
+    """Units a report may use: those in the base unit of the product's official series."""
+    product = session.get(Product, product_id)
+    base_unit = series_base_unit(session, product, price_type)
+    rows = session.execute(
+        select(Unit.id, Unit.label).where(Unit.base_unit == base_unit).order_by(Unit.factor)
+    )
+    return [Choice(*row) for row in rows]
+
+
+def active_markets(session: Session) -> list[Choice]:
+    rows = session.execute(
+        select(Market.id, Market.name).where(Market.is_active).order_by(Market.name)
+    )
+    return [Choice(*row) for row in rows]
+
+
+def reports_by(session: Session, reporter_id: int, limit: int = 10) -> list[ReportRow]:
+    """A reporter's latest field reports, newest first."""
+    rows = session.execute(
+        select(
+            Product.name,
+            Market.name,
+            Price.observed_on,
+            Price.amount,
+            Unit.label,
+            Price.status,
+            Price.is_outlier,
+        )
+        .join(Product, Price.product_id == Product.id)
+        .join(Market, Price.market_id == Market.id)
+        .join(Unit, Price.unit_id == Unit.id)
+        .where(Price.source == PriceSource.FIELD_REPORT, Price.reporter_id == reporter_id)
+        .order_by(Price.created_at.desc(), Price.id.desc())
+        .limit(limit)
+    )
+    return [ReportRow(*row[:5], str(row[5]), row[6]) for row in rows]
