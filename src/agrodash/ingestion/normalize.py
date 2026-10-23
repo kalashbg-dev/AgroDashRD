@@ -144,6 +144,11 @@ def name_key(name: str) -> str:
     return " ".join(re.sub(r"[^a-z0-9]+", " ", fold(name)).split())
 
 
+def word_set_key(key: str) -> str:
+    """A name key with its words sorted: "pinta gira" and "gira pinta" collide."""
+    return " ".join(sorted(key.split()))
+
+
 def clean_name(name: str) -> str:
     return " ".join(str(name).split())
 

@@ -85,6 +85,27 @@ def merge_products(session: Session, actor: User, source_id: int, target_id: int
     return target
 
 
+def merge_family(
+    session: Session, actor: User, target_id: int, member_ids: list[int]
+) -> list[tuple[str, str]]:
+    """Merge every member of a product family into `target_id`.
+
+    Each member is merged on its own, so one that clashes does not stop the rest;
+    returns (name, reason) for the members left unmerged.
+    """
+    _check(actor)
+    problems = []
+    for member_id in member_ids:
+        if member_id == target_id:
+            continue
+        try:
+            merge_products(session, actor, member_id, target_id)
+        except CatalogError as error:
+            session.rollback()
+            problems.append((_get(session, Product, member_id).name, str(error)))
+    return problems
+
+
 def set_product_active(session: Session, actor: User, product_id: int, *, active: bool) -> Product:
     _check(actor)
     product = _get(session, Product, product_id)
