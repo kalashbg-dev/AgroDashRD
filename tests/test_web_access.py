@@ -7,10 +7,34 @@ from agrodash.web.access import can_open, landing_page, visible_pages
 @pytest.mark.parametrize(
     ("role", "pages"),
     [
-        (None, ["precios", "pronostico", "ingresar"]),
-        (Role.TECNICO, ["precios", "pronostico", "ingresar", "reportar"]),
-        (Role.ADMIN, ["precios", "pronostico", "ingresar", "reportar", "admin", "catalogo"]),
-        (Role.SUPERADMIN, ["precios", "pronostico", "ingresar", "reportar", "admin", "catalogo"]),
+        (None, ["precios", "pronostico", "temporadas", "mercados", "ingresar"]),
+        (Role.TECNICO, ["precios", "pronostico", "temporadas", "mercados", "ingresar", "reportar"]),
+        (
+            Role.ADMIN,
+            [
+                "precios",
+                "pronostico",
+                "temporadas",
+                "mercados",
+                "ingresar",
+                "reportar",
+                "admin",
+                "catalogo",
+            ],
+        ),
+        (
+            Role.SUPERADMIN,
+            [
+                "precios",
+                "pronostico",
+                "temporadas",
+                "mercados",
+                "ingresar",
+                "reportar",
+                "admin",
+                "catalogo",
+            ],
+        ),
     ],
 )
 def test_each_role_sees_its_pages(role, pages):

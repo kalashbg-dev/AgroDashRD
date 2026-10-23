@@ -74,7 +74,8 @@ class Forecast(_SeriesColumns, Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     run_id: Mapped[int] = mapped_column(ForeignKey("forecast_runs.id"), index=True)
     model: Mapped[str] = mapped_column(String(40))
-    # 1 is the next report period; target_on is that period's stored-date slot.
+    # 1 is the next report period; target_on is that period's stored-date slot. Steps
+    # beyond the short horizon are monthly points of the long term (engine.month_steps).
     step: Mapped[int]
     target_on: Mapped[date]
     value: Mapped[Decimal] = mapped_column(Numeric(14, 4))

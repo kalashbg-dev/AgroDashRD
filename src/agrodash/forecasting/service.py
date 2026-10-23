@@ -4,12 +4,26 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from importlib.metadata import version
 
+import pandas as pd
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from agrodash.forecasting.engine import HORIZON, SELECTED_MODEL, benchmark, forecast_all
+from agrodash.forecasting.engine import (
+    HORIZON,
+    LONG_MIN_PERIODS,
+    SELECTED_MODEL,
+    benchmark,
+    forecast_all,
+    month_steps,
+)
 from agrodash.forecasting.models import Forecast, ForecastEvaluation, ForecastRun, ForecastStatus
-from agrodash.forecasting.series import SeriesKey, load_training_data, next_periods, period_date
+from agrodash.forecasting.series import (
+    SeriesKey,
+    load_training_data,
+    months_after,
+    next_periods,
+    period_date,
+)
 from agrodash.ingestion.quality import series_coverage
 
 MODEL_VERSION = (
@@ -72,16 +86,29 @@ def _forecast(
     data = load_training_data(session, keys)
     # Every forecast targets the periods after the latest published report; a series whose
     # last price is older forecasts across that gap.
-    targets = next_periods(data.calendar[data.latest], HORIZON)
+    last = data.calendar[data.latest]
+    targets = dict(enumerate(next_periods(last, HORIZON), start=1))
     gaps = (data.latest - data.frame.groupby("unique_id")["ds"].max()).to_dict()
-    for row in forecast_all(data.frame, gaps=gaps).itertuples():
+    forecasts = [forecast_all(data.frame, gaps=gaps)]
+    # Series with years of history also get one point per month for a year: week 4 of
+    # month m ahead, as many report periods away as months usually hold. The four weekly
+    # steps already cover the first month.
+    steps = month_steps()[1:]
+    for months, step in enumerate(steps, start=2):
+        targets[step] = (*months_after(last, months), 4)
+    sizes = data.frame.groupby("unique_id")["ds"].size()
+    long = data.frame[data.frame["unique_id"].isin(sizes[sizes >= LONG_MIN_PERIODS].index)]
+    if not long.empty:
+        ahead = forecast_all(long, horizon=steps[-1], gaps=gaps, history=None)
+        forecasts.append(ahead[ahead["step"].isin(steps)])
+    for row in pd.concat(forecasts).itertuples():
         session.add(
             Forecast(
                 run=run,
                 **_series(data.keys[row.unique_id]),
                 model=SELECTED_MODEL,
                 step=row.step,
-                target_on=period_date(targets[row.step - 1]),
+                target_on=period_date(targets[row.step]),
                 value=_decimal(row.value),
                 lo_80=_decimal(row.lo_80),
                 hi_80=_decimal(row.hi_80),
