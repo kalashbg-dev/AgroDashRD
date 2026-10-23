@@ -7,6 +7,7 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
+from alembic.util import CommandError
 from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -90,7 +91,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
     except SQLAlchemyError:
         print(
-            "error: database is unreachable or not migrated (run 'alembic upgrade head')",
+            "error: database is unreachable or not migrated (run 'agrodash migrate')",
             file=sys.stderr,
         )
         return 1
@@ -232,7 +233,12 @@ def _quality_report(args: argparse.Namespace) -> int:
 
 
 def _migrate() -> int:
-    upgrade_database(get_settings().database_url)
+    try:
+        upgrade_database(get_settings().database_url)
+    except CommandError as error:
+        # For example a database migrated by a newer version than this one.
+        print(f"error: cannot migrate the database: {error}", file=sys.stderr)
+        return 1
     print("Database schema is up to date")
     return 0
 
