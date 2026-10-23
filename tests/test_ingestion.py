@@ -55,7 +55,8 @@ def test_wholesale_csv_loads_prices_and_quarantines_bad_rows(session):
         Decimal("2350.00"),
         Decimal("18.8000"),
     )
-    assert first_week.market.name == "Mercado Nuevo"
+    assert first_week.market.name == "Referencia mayorista (Mercadom y Mercado Nuevo)"
+    assert first_week.market.kind is MarketKind.WHOLESALE
     assert (first_week.price_type, first_week.source, first_week.status) == (
         PriceType.WHOLESALE,
         PriceSource.OFFICIAL,
@@ -376,6 +377,20 @@ def test_a_wholesale_week_with_a_few_products_sold_by_the_unit_still_loads(sessi
 
     assert run.rows_rejected == 0
     assert session.query(Price).count() == 4
+
+
+def test_mercado_nuevo_keeps_only_retail_prices_after_both_reports_load(session):
+    load(session, "mayorista.csv")
+    load(session, "minorista.csv")
+
+    kinds = {market.name: market.kind for market in session.query(Market)}
+    assert kinds["Mercado Nuevo"] is MarketKind.RETAIL
+    assert kinds["Referencia mayorista (Mercadom y Mercado Nuevo)"] is MarketKind.WHOLESALE
+    by_market = Counter((price.market.name, price.price_type) for price in session.query(Price))
+    assert {name for name, price_type in by_market if price_type is PriceType.WHOLESALE} == {
+        "Referencia mayorista (Mercadom y Mercado Nuevo)"
+    }
+    assert by_market[("Mercado Nuevo", PriceType.RETAIL)] > 0
 
 
 def test_names_where_the_source_wrote_a_semicolon_for_enye_are_repaired(session):

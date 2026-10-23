@@ -49,8 +49,9 @@ from agrodash.prices.models import (
 )
 
 MAX_FILE_BYTES = 50 * 1024 * 1024
-# The wholesale report has no market column; it is collected at Mercado Nuevo.
-WHOLESALE_MARKET = "Mercado Nuevo"
+# The wholesale report has no market column: its one price stands for Mercadom and Mercado
+# Nuevo, the two markets that trade wholesale. Mercado Nuevo keeps its own retail prices.
+WHOLESALE_MARKET = "Referencia mayorista (Mercadom y Mercado Nuevo)"
 WHOLESALE_COLUMNS = 8
 WHOLESALE_DATE_COLUMNS = (5, 6, 7)
 WHOLESALE_UNIT_COLUMN = 3
