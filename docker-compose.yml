@@ -55,6 +55,9 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+      # Streamlit needs a few seconds to start; check often until it answers.
+      start_period: 30s
+      start_interval: 3s
 
   # Weekly job: run it from cron or the host's scheduler, e.g. Mondays at 06:00:
   #   0 6 * * 1  cd /srv/agrodash && docker compose run --rm weekly

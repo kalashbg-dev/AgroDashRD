@@ -84,3 +84,12 @@ def test_rejects_unknown_environment(monkeypatch):
 
     with pytest.raises(ValidationError):
         load()
+
+
+def test_an_empty_drive_setting_keeps_the_official_reports(monkeypatch):
+    # docker-compose passes "" when .env does not set it.
+    monkeypatch.setenv("AGRODASH_DRIVE_FILE_IDS", "  ")
+
+    assert Settings(_env_file=None).drive_file_id_list == Settings.model_fields[
+        "drive_file_ids"
+    ].default.split(",")

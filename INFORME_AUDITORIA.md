@@ -1,4 +1,4 @@
-> **Documento histórico.** Describe el sistema anterior (FastAPI, Flutter, Streamlit original), que fue reemplazado por el paquete `src/agrodash`. Se conserva como registro; para el estado actual ver [README.md](README.md).
+> **Las secciones 1 a 5 describen el sistema anterior** (Streamlit original, luego FastAPI y Flutter), reemplazado por el paquete `src/agrodash`. La [sección 6](#6-seguimiento-estado-en-octubre-de-2026) resume cómo quedó cada hallazgo; para usar el sistema actual ver [README.md](README.md).
 
 # Informe de Auditoría Técnica - AgroDashRD
 
@@ -64,3 +64,35 @@ Se ha completado una reestructuración significativa del proyecto para abordar l
 1.  **Implementación Lógica Móvil:** Completar la integración de los endpoints reales en `api_service.dart`.
 2.  **Pruebas End-to-End:** Verificar el flujo completo desde el registro de usuario en la app móvil hasta la persistencia en base de datos.
 3.  **Despliegue:** Configurar pipelines de CI/CD para automatizar el despliegue del backend y la compilación de la app móvil.
+
+---
+
+## 6. Seguimiento: estado en octubre de 2026
+
+La sección 5 quedó superada: el backend FastAPI y la app Flutter se retiraron (la app no tenía código) y todo se reconstruyó como un solo paquete Python, `src/agrodash`, con una web Streamlit pensada para el teléfono. Esta tabla resume cómo quedó cada hallazgo.
+
+| Hallazgo | Estado | Cómo se resolvió |
+|---|---|---|
+| Lógica de negocio acoplada a la interfaz (2.1) | Resuelto | Catálogo, precios, ingesta, pronósticos y cuentas no importan Streamlit; se prueban sin él (más de 400 pruebas, también sobre PostgreSQL en CI) |
+| Sin persistencia, archivos planos (2.1) | Resuelto | PostgreSQL en producción, SQLite en desarrollo, migraciones Alembic |
+| `prophet` importado pero excluido (2.2.1) | Resuelto | Se retiró. Los pronósticos se eligieron con pruebas sobre datos no vistos: el último precio con rangos calibrados superó a AutoETS, Theta y gradient boosting a 4 semanas, 3 meses y 12 meses |
+| Manejo de errores genérico (2.2.2) | Resuelto | Las filas dudosas van a cuarentena con su motivo; cada carga y corrida de pronóstico guarda su estado y su error |
+| Lógica duplicada (2.2.3) | Resuelto | Una sola normalización de nombres, unidades y semanas, reutilizada por la carga de archivos, Drive y los reportes de campo |
+| Autenticación ficticia (2.2.4) | Resuelto | Cuentas en base de datos, contraseñas Argon2id, bloqueo tras 5 intentos, roles TECNICO, ADMIN y SUPERADMIN verificados en el servidor en cada página |
+| Seguridad nula (2.3) | Resuelto | Lo anterior, más protección XSRF, base y web publicadas solo en localhost detrás de un proxy HTTPS, contenedor sin privilegios y revisiones de seguridad por fase |
+| Escalabilidad de Streamlit (2.3) | Mitigado | Los pronósticos se calculan una vez por semana y se guardan; las consultas de las páginas se guardan en caché 10 minutos |
+| Compilación móvil (3) | Decisión | Web adaptada al teléfono en lugar de app nativa; se revisó cada página a 390 px de ancho, en modo claro y oscuro |
+
+### Problemas de datos del sistema original, corregidos
+
+| Problema | Efecto en el sistema original | Ahora |
+|---|---|---|
+| Toda fecha se fijaba en el día 15 del mes | Vistas semanales y por día de la semana sin sentido | Fecha semanal real (semanas 1 a 5 de cada informe) |
+| "1,200" se leía como 1.2 | Precios con separador de miles divididos por mil | Separadores decimales y de miles reconocidos |
+| La mayoría de vistas usaba solo el precio mayorista | Los precios minoristas casi no se veían | Cada vista elige mayorista o minorista |
+| Rubro desconocido convertido en "Frutas" | Productos en el rubro equivocado | Variantes de rubro normalizadas; lo dudoso se revisa |
+| Precios inventados (mayorista = minorista × 0,8) | Datos que no existían | Los faltantes quedan como faltantes |
+| Métricas de pronóstico sobre los mismos datos de entrenamiento | Precisión sobrestimada | Pruebas sobre periodos no vistos; la cobertura medida se muestra en la página |
+| El mismo producto con nombres distintos según la época | Historias partidas | Grupos de nombres que un administrador une en Catálogo |
+
+Lo que se conservó del sistema original, rehecho sobre estos datos: precios por mercado, historia, temporadas (meses altos y bajos, mapas de calor), comparación de mercados, valor de la cosecha, mayores cambios y descargas CSV. No se trasladaron el planificador de siembra (los informes no traen ciclos de cultivo) ni los gráficos por día de la semana.

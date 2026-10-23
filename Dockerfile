@@ -18,7 +18,7 @@ RUN useradd --system --uid 10001 --no-create-home agrodash
 WORKDIR /app
 COPY --from=build /app/.venv /app/.venv
 # Streamlit reads its theme and limits from .streamlit/ in the working directory.
-COPY .streamlit ./.streamlit
+COPY .streamlit/config.toml ./.streamlit/config.toml
 ENV PATH=/app/.venv/bin:$PATH \
     PYTHONUNBUFFERED=1 \
     AGRODASH_ENV=production \
