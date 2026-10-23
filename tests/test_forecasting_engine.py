@@ -2,7 +2,13 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from agrodash.forecasting.engine import HORIZON, INTERVAL_HISTORY, benchmark, forecast_all
+from agrodash.forecasting.engine import (
+    HORIZON,
+    INTERVAL_HISTORY,
+    benchmark,
+    forecast_all,
+    month_steps,
+)
 
 
 def frame(values_by_series: dict[str, list[float]]) -> pd.DataFrame:
@@ -95,3 +101,23 @@ def test_a_gap_before_the_target_widens_the_range_like_a_longer_horizon():
 def test_unknown_benchmark_models_are_refused():
     with pytest.raises(ValueError, match="Unknown benchmark model 'Prophet'"):
         benchmark(frame({"a": list(np.linspace(1, 50, 120))}), models=("Prophet",))
+
+
+def test_long_horizons_take_their_range_from_the_whole_history():
+    calm = [100.0] * (INTERVAL_HISTORY + 60)
+    wild_long_ago = [50.0, 150.0] * 100
+
+    last = (
+        forecast_all(frame({"a": wild_long_ago + calm}), horizon=54, history=None)
+        .set_index("step")
+        .loc[54]
+    )
+
+    assert last.value == 100.0
+    assert last.lo_95 < 100.0 < last.hi_95
+
+
+def test_month_steps_follow_the_report_calendar():
+    # About 4.5 report periods per month (some months publish a fifth week).
+    assert month_steps(3) == [5, 9, 14]
+    assert month_steps()[-1] == 54

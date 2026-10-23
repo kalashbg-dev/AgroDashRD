@@ -7,6 +7,7 @@ seen (MASE 1.086-1.125 against 1.063). So the forecast is the last price, and ev
 benchmarks those models against it to notice if that ever changes.
 """
 
+import math
 import warnings
 
 import numpy as np
@@ -20,28 +21,46 @@ HORIZON = 4
 # Shorter histories cover less; longer ones are wider without covering much more.
 INTERVAL_HISTORY = SEASON_LENGTH
 LEVELS = {80: (0.10, 0.90), 95: (0.025, 0.975)}
+# Medium and long term: one point per month for a year. Seasonal adjustments did not beat
+# the last price three or twelve months ahead either (L31), so the value stays the last
+# price; ranges use the whole history, which held about 84% (80%) and 96% (95%) of later
+# prices three months ahead and 82% and 92% twelve months ahead.
+LONG_MONTHS = 12
+# The report calendar has about 4.5 periods per month (some months publish a fifth week).
+PERIODS_PER_MONTH = SEASON_LENGTH / 12
+# Ranges twelve months ahead need several years of moves to draw from.
+LONG_MIN_PERIODS = 3 * SEASON_LENGTH
 SELECTED_MODEL = "Naive"
 BENCHMARK_MODELS = ("AutoETS", "Theta", "GBM")
 BENCHMARK_WINDOWS = 4
 GBM_LAGS = [1, 2, 3, 4, 8, 13, 26]
 
 
+def month_steps(months: int = LONG_MONTHS) -> list[int]:
+    """Report periods ahead of each of the next `months` months."""
+    return [math.ceil(PERIODS_PER_MONTH * month) for month in range(1, months + 1)]
+
+
 def forecast_all(
-    frame: pd.DataFrame, horizon: int = HORIZON, gaps: dict[str, int] | None = None
+    frame: pd.DataFrame,
+    horizon: int = HORIZON,
+    gaps: dict[str, int] | None = None,
+    history: int | None = INTERVAL_HISTORY,
 ) -> pd.DataFrame:
     """One row per series and step: the last price and its 80% and 95% range.
 
     The range for step k is the last price times the quantiles of how prices changed
-    over k periods (price k periods later / price) during the last year, widened if
-    needed so it contains the last price. `gaps` holds, per series, how many periods
-    separate its last price from the latest report: step 1 is then gap + 1 periods away.
+    over k periods (price k periods later / price) during the last `history` periods (the
+    whole series when None), widened if needed so it contains the last price. `gaps`
+    holds, per series, how many periods separate its last price from the latest report:
+    step 1 is then gap + 1 periods away.
     """
     rows = []
     for uid, group in frame.sort_values("ds").groupby("unique_id", sort=True):
         values = group["y"].reset_index(drop=True)
         last = float(values.iloc[-1])
         gap = (gaps or {}).get(uid, 0)
-        recent = values.iloc[-(INTERVAL_HISTORY + gap + horizon) :]
+        recent = values if history is None else values.iloc[-(history + gap + horizon) :]
         for step in range(1, horizon + 1):
             ratios = (recent.shift(-(gap + step)) / recent).dropna()
             row = {"unique_id": uid, "step": step, "value": last}

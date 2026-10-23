@@ -198,3 +198,24 @@ def test_a_failing_benchmark_keeps_the_forecasts_and_notes_the_error(
     assert run.error == "Benchmark failed: RuntimeError: numba crashed"
     assert session.query(Forecast).count() == 4
     assert session.query(ForecastEvaluation).count() == 0
+
+
+def test_series_with_three_years_also_get_a_point_per_month_for_a_year(session, monkeypatch):
+    monkeypatch.setattr(quality, "MIN_WEEKS", 8)
+    months = [(year, month) for year in (2023, 2024, 2025) for month in range(1, 13)]
+    long = add_weekly_prices(session, "Larga", [*months, *((2026, m) for m in range(1, 10))])
+    short = add_weekly_prices(session, "Corta", [(2026, m) for m in (7, 8, 9)])
+
+    run_forecasts(session, run_benchmark=False)
+
+    def steps(product):
+        rows = session.query(Forecast).filter_by(product_id=product.id).order_by(Forecast.step)
+        return [(row.step, row.target_on) for row in rows]
+
+    assert [step for step, _ in steps(short)] == [1, 2, 3, 4]
+    long_steps = steps(long)
+    assert [step for step, _ in long_steps][:6] == [1, 2, 3, 4, 9, 14]
+    assert len(long_steps) == 4 + 11
+    # Month m ahead is week 4 of that month: the last report was September 2026.
+    assert long_steps[4][1] == week_slot(2026, 11, 4)
+    assert long_steps[-1][1] == week_slot(2027, 9, 4)
