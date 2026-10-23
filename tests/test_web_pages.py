@@ -132,3 +132,38 @@ def test_pages_say_so_when_there_is_no_data(cli_database):
     page = open_page("precios")
 
     assert [info.value for info in page.info] == ["No hay precios minoristas cargados."]
+
+
+@pytest.fixture
+def seasonal(cli_database):
+    """Papaya over three full years: dear in March, cheap in September."""
+    st.cache_data.clear()
+    with Session(cli_database) as session:
+        unit = Unit(code="1-unit", label="1 unit", base_unit=BaseUnit.UNIT, factor=Decimal(1))
+        papaya = Product(name="Lechosa", category="Frutas", base_unit=BaseUnit.UNIT)
+        market = Market(name="Mercado Nuevo", kind=MarketKind.RETAIL)
+        session.add_all([unit, papaya, market])
+        for year in (2023, 2024, 2025):
+            for month in range(1, 13):
+                value = {3: 130, 9: 70}.get(month, 100)
+                session.add(price(papaya, market, unit, week_slot(year, month, 1), value))
+        session.commit()
+    yield
+    st.cache_data.clear()
+
+
+def test_seasons_page_names_the_dear_and_cheap_months_and_draws_three_charts(seasonal):
+    page = open_page("temporadas")
+
+    assert not page.exception
+    assert "**Precio alto:** marzo" in page.markdown[0].value
+    assert "**Precio bajo:** septiembre" in page.markdown[0].value
+    assert len(page.get("vega_lite_chart")) == 3
+    assert not page.warning
+
+
+def test_seasons_page_needs_a_full_year_of_prices(prices):
+    page = open_page("temporadas")
+
+    assert not page.exception
+    assert "año completo" in page.info[0].value

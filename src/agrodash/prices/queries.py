@@ -41,7 +41,7 @@ class HistoryPoint:
     value: float
 
 
-def _published():
+def published():
     """Official validated prices: what the public pages show."""
     return (Price.source == PriceSource.OFFICIAL, Price.status == PriceStatus.VALIDATED)
 
@@ -51,7 +51,7 @@ def products_with_prices(session: Session, price_type: PriceType) -> list[Produc
     rows = session.execute(
         select(Product.id, Product.name, Product.category, func.max(Price.observed_on))
         .join(Price, Price.product_id == Product.id)
-        .where(Product.is_active, Price.price_type == price_type, *_published())
+        .where(Product.is_active, Price.price_type == price_type, *published())
         .group_by(Product.id, Product.name, Product.category)
         .order_by(Product.category, Product.name)
     )
@@ -64,7 +64,7 @@ def latest_prices(session: Session, product_id: int, price_type: PriceType) -> l
         select(Market.id, Market.name, Unit.base_unit, Price.observed_on, Price.price_per_base_unit)
         .join(Market, Price.market_id == Market.id)
         .join(Unit, Price.unit_id == Unit.id)
-        .where(Price.product_id == product_id, Price.price_type == price_type, *_published())
+        .where(Price.product_id == product_id, Price.price_type == price_type, *published())
         .order_by(Market.id, Unit.base_unit, Price.observed_on)
     ).all()
     series: dict[tuple, list] = {}
@@ -97,7 +97,7 @@ def price_history(
             Unit.base_unit == base_unit,
             Price.market_id.in_(market_ids),
             Price.observed_on >= since,
-            *_published(),
+            *published(),
         )
         .order_by(Market.name, Price.observed_on)
     )
@@ -105,7 +105,7 @@ def price_history(
 
 
 def latest_report_date(session: Session) -> date | None:
-    return session.scalar(select(func.max(Price.observed_on)).where(*_published()))
+    return session.scalar(select(func.max(Price.observed_on)).where(*published()))
 
 
 @dataclass(frozen=True)

@@ -7,6 +7,7 @@ import streamlit as st
 from agrodash.forecasting import queries as forecast_queries
 from agrodash.ingestion.quality import series_coverage
 from agrodash.prices import queries as price_queries
+from agrodash.prices import seasons
 from agrodash.prices.models import PriceType
 from agrodash.web.state import database
 
@@ -76,6 +77,12 @@ def history(product_id, price_type, base_unit, market_ids: tuple[int, ...], sinc
 def forecasts(product_id: int, price_type: PriceType):
     with database() as session:
         return forecast_queries.latest_forecasts(session, product_id, price_type)
+
+
+@st.cache_data(ttl=CACHE_SECONDS, show_spinner=LOADING)
+def season_index(product_ids: tuple[int, ...], price_type: PriceType):
+    with database() as session:
+        return seasons.season_index(seasons.monthly_prices(session, list(product_ids), price_type))
 
 
 @st.cache_data(ttl=CACHE_SECONDS, show_spinner=LOADING)
