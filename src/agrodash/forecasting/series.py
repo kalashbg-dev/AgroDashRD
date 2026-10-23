@@ -83,6 +83,12 @@ def next_periods(last: Period, count: int) -> list[Period]:
     return periods
 
 
+def months_after(period: Period, months: int) -> tuple[int, int]:
+    """(year, month) `months` months after the month of `period`."""
+    index = period[0] * 12 + period[1] - 1 + months
+    return index // 12, index % 12 + 1
+
+
 def report_calendar(session: Session) -> list[Period]:
     """Every report period from the first official price to the last.
 

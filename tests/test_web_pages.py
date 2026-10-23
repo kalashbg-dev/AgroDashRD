@@ -197,3 +197,47 @@ def test_markets_page_compares_wholesale_and_retail_by_month(prices, cli_databas
     assert not page.exception
     assert "09/2026" in page.markdown[1].value
     assert len(page.get("vega_lite_chart")) == 2
+
+
+def test_forecast_page_offers_longer_plazos_only_with_three_years_of_prices(prices):
+    page = open_page("pronostico")
+
+    page.segmented_control(key="pronostico_horizon").set_value("12 meses").run()
+
+    assert not page.exception
+    assert "hacen falta tres años" in page.info[0].value
+    assert list(page.dataframe[0].value.columns) == ["Semana", "Pronóstico", "Rango 80 %"]
+
+
+@pytest.fixture
+def years_of_prices(cli_database):
+    """Papaya every week since 2023, dear in March and cheap in September, forecast."""
+    st.cache_data.clear()
+    with Session(cli_database) as session:
+        unit = Unit(code="1-unit", label="1 unit", base_unit=BaseUnit.UNIT, factor=Decimal(1))
+        papaya = Product(name="Lechosa", category="Frutas", base_unit=BaseUnit.UNIT)
+        market = Market(name="Mercado Nuevo", kind=MarketKind.RETAIL)
+        session.add_all([unit, papaya, market])
+        for year in (2023, 2024, 2025, 2026):
+            for month in range(1, 13 if year < 2026 else 10):
+                value = {3: 130, 9: 70}.get(month, 100)
+                for week in range(1, 5):
+                    session.add(price(papaya, market, unit, week_slot(year, month, week), value))
+        session.commit()
+        run_forecasts(session, run_benchmark=False)
+    yield
+    st.cache_data.clear()
+
+
+def test_forecast_page_shows_a_year_month_by_month_with_the_season(years_of_prices):
+    page = open_page("pronostico")
+
+    page.segmented_control(key="pronostico_horizon").set_value("12 meses").run()
+
+    assert not page.exception
+    assert page.metric[0].label == "En 12 meses (09/2027)"
+    table = page.dataframe[0].value
+    assert list(table.columns) == ["Fecha", "Rango 80 % (RD$)", "Temporada"]
+    assert len(table) == 15
+    assert table["Fecha"].tolist()[4] == "11/2026"
+    assert table.set_index("Fecha").loc["03/2027", "Temporada"] == "Alto"

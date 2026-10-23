@@ -65,7 +65,7 @@ def history_chart(history: pd.DataFrame, colors: alt.Scale, theme: str, unit: st
     """Price per base unit over time, one 2px line per market, with a hover crosshair."""
     hover = alt.selection_point(fields=["observed_on"], nearest=True, on="pointerover", empty=False)
     base = alt.Chart(history).encode(
-        x=alt.X("observed_on:T", axis=_axis(theme, format="%b %Y")),
+        x=alt.X("observed_on:T", axis=_axis(theme, format="%m/%Y")),
         y=alt.Y(
             "value:Q",
             axis=_axis(theme, f"RD$ por {unit}", format=",.2~f"),
@@ -110,7 +110,7 @@ def forecast_chart(
     )
     last = last.assign(lo_95=last["lo_80"], hi_95=last["hi_80"])
     ahead = pd.concat([last, forecast], ignore_index=True)
-    x = alt.X("observed_on:T", axis=_axis(theme, format="%b %Y"))
+    x = alt.X("observed_on:T", axis=_axis(theme, format="%m/%Y"))
     y_axis = _axis(theme, f"RD$ por {unit}", format=",.2~f")
     band95 = (
         alt.Chart(ahead)
@@ -255,7 +255,7 @@ def spread_chart(spread: pd.DataFrame, theme: str, unit: str) -> alt.Chart:
         alt.Chart(long)
         .mark_line(strokeWidth=2, point=alt.OverlayMarkDef(size=30, filled=True))
         .encode(
-            x=alt.X("month:T", axis=_axis(theme, format="%b %Y")),
+            x=alt.X("month:T", axis=_axis(theme, format="%m/%Y")),
             y=alt.Y(
                 "value:Q",
                 axis=_axis(theme, f"RD$ por {unit}", format=",.2~f"),
