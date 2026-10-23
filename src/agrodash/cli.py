@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from agrodash.accounts.models import Role
 from agrodash.accounts.service import AccountError, create_user
 from agrodash.forecasting.service import ForecastError, run_forecasts
-from agrodash.infra.db import create_db_engine
+from agrodash.infra.db import create_db_engine, upgrade_database
 from agrodash.infra.settings import get_settings
 from agrodash.ingestion import quality
 from agrodash.ingestion.drive import DriveError, download
@@ -61,6 +61,9 @@ def main(argv: list[str] | None = None) -> int:
         help="do not re-measure the other models against the last price (much faster)",
     )
 
+    migrate_help = "create or update the database schema to the latest version"
+    commands.add_parser("migrate", help=migrate_help, description=_sentence(migrate_help))
+
     web_help = "start the web app (Streamlit)"
     web = commands.add_parser("web", help=web_help, description=_sentence(web_help))
     web.add_argument("--port", type=int, default=8501, help="port to listen on (default 8501)")
@@ -77,6 +80,8 @@ def main(argv: list[str] | None = None) -> int:
             return _quality_report(args)
         if args.command == "forecast":
             return _forecast(args)
+        if args.command == "migrate":
+            return _migrate()
         return _ingest(args)
     except ValidationError as error:
         # Only the messages: pydantic's full report would echo the database URL and its password.
@@ -223,6 +228,12 @@ def _quality_report(args: argparse.Namespace) -> int:
             print(f"error: cannot write {args.series_csv}: {error.strerror}", file=sys.stderr)
             return 1
         print(f"Wrote {len(report.series)} series to {args.series_csv}")
+    return 0
+
+
+def _migrate() -> int:
+    upgrade_database(get_settings().database_url)
+    print("Database schema is up to date")
     return 0
 
 
