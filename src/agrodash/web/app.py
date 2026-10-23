@@ -10,6 +10,7 @@ from agrodash.web.state import current_role, current_user, sign_out
 # Not "pages/": Streamlit would turn that folder into an automatic multipage app whose
 # URLs run each file directly, skipping this navigation (and its role-based menu).
 PAGES = Path(__file__).parent / "views"
+ASSETS = Path(__file__).parent / "assets"
 TITLES = {
     "precios": ("Precios", ":material/sell:"),
     "pronostico": ("Pronóstico", ":material/trending_up:"),
@@ -23,7 +24,10 @@ TITLES = {
     "catalogo": ("Catálogo", ":material/inventory_2:"),
 }
 
-st.set_page_config(page_title="AgroDashRD", page_icon=":material/agriculture:", layout="centered")
+st.set_page_config(page_title="AgroDashRD", page_icon=str(ASSETS / "icon.svg"), layout="centered")
+# One logo for both themes: the theme is not always known on a session's first run, so
+# its colors read on the light and the dark sidebar (3.5:1 or more on each).
+st.logo(str(ASSETS / "logo.svg"), icon_image=str(ASSETS / "icon.svg"), size="large")
 
 role = current_role()
 pages = {

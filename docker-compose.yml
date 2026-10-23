@@ -1,4 +1,16 @@
-# Local PostgreSQL for development. Set POSTGRES_PASSWORD in .env first.
+# AgroDashRD with PostgreSQL. Set POSTGRES_PASSWORD in .env first (letters and digits:
+# it also goes inside the database URL).
+#   docker compose up -d                        database, migrations and web app
+#   docker compose run --rm weekly              load the Drive reports and forecast
+#   docker compose run --rm web create-admin --email you@example.com --superadmin
+# Only `db` runs during development (`docker compose up -d db`).
+x-app: &app
+  build: .
+  image: agrodash:latest
+  environment:
+    AGRODASH_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-agrodash}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-agrodash}
+    AGRODASH_DRIVE_FILE_IDS: ${AGRODASH_DRIVE_FILE_IDS:-}
+
 services:
   db:
     image: postgres:16-alpine
@@ -17,6 +29,48 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  migrate:
+    <<: *app
+    command: ["migrate"]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  web:
+    <<: *app
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    # Published on this machine only; put a reverse proxy with HTTPS in front of it.
+    ports:
+      - "127.0.0.1:8501:8501"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:8501/_stcore/health', timeout=3)
+      # Every 10 s, so the app shows healthy soon after it starts; failures in the
+      # first 30 s do not count while Streamlit loads. (start_interval would be finer
+      # but needs Docker Engine 25 or later.)
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  # Weekly job: run it from cron or the host's scheduler, e.g. Mondays at 06:00:
+  #   0 6 * * 1  cd /srv/agrodash && docker compose run --rm weekly
+  weekly:
+    <<: *app
+    entrypoint: ["sh", "-c"]
+    command: ["agrodash ingest --drive && agrodash forecast"]
+    # Migrates first, so the job also works on a new server or right after an update.
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    profiles: ["jobs"]
 
 volumes:
   postgres_data:

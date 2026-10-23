@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="200" height="40" viewBox="0 0 200 40" role="img" aria-label="AgroDashRD">
+  <rect x="0" y="2" width="36" height="36" rx="10" fill="#2f6b45"/>
+  <path d="M7 28 L14 22 L20 25 L29 15" fill="none" stroke="#faf8f3" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M20 25 C20 17 22 12 27 10 C27 15 25 19 20 21" fill="#b9e3c6"/>
+  <text x="46" y="27" font-family="Georgia, serif" font-size="19" font-weight="600" fill="#3d8a5a">AgroDash<tspan fill="#c9612b">RD</tspan></text>
+</svg>

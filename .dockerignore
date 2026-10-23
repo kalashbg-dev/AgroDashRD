@@ -1,0 +1,9 @@
+# Only pyproject.toml, uv.lock, README.md, src/ and .streamlit/config.toml go in
+# (never .streamlit/secrets.toml).
+*
+!pyproject.toml
+!uv.lock
+!README.md
+!src/
+!.streamlit/config.toml
+**/__pycache__

@@ -128,3 +128,21 @@ def test_a_reordered_name_joins_the_active_product_when_a_retired_one_has_the_sa
     found = CatalogResolver(session).product("Roja (Pinta) gira", "Legumbres", BaseUnit.POUND)
 
     assert found is active
+
+
+def test_a_typo_joins_the_active_product_when_a_retired_one_is_as_close(session):
+    retired = Product(
+        name="Berengena morada", category="Legumbres", base_unit=BaseUnit.POUND, is_active=False
+    )
+    active = Product(name="Berenjena morada", category="Legumbres", base_unit=BaseUnit.POUND)
+    session.add_all([retired, active])
+    session.flush()
+    # The retired product's alias is older, so an unordered scan meets it first.
+    session.add(ProductAlias(raw_name="berengena morada", product=retired))
+    session.flush()
+    session.add(ProductAlias(raw_name="berenjena morada", product=active))
+    session.commit()
+
+    found = CatalogResolver(session).product("Berenjenna morada", "Legumbres", BaseUnit.POUND)
+
+    assert found is active
