@@ -1,96 +1,97 @@
-# AgroDashRD - Dominican Agricultural Sector Analysis Dashboard 🌱
+# AgroDashRD
 
-![Agrodash](Screenshots/Agrodash-main.png)
+Agricultural prices of the Dominican Republic, readable on a phone: the latest official wholesale and retail prices, how they move through the year, where each product is cheapest, and what to expect in the coming weeks and months. Anyone can read it; technicians report field prices and admins keep the data clean.
 
-## What is AgroDashRD?
+| Precios | Temporadas | Mercados | Pronóstico |
+|---|---|---|---|
+| ![Precios](Screenshots/precios.png) | ![Temporadas](Screenshots/temporadas.png) | ![Mercados](Screenshots/mercados.png) | ![Pronóstico](Screenshots/pronostico.png) |
 
-AgroDashRD is a comprehensive platform for visualizing and analyzing agricultural sector data in the Dominican Republic. It is being rebuilt as a single Python application: a mobile-first **Streamlit** web app on top of a clean data pipeline and validated price forecasts.
-
-## Architecture
-
-One Python package, `src/agrodash`, organized by feature. Business logic does not depend on the UI, so the Streamlit layer can be replaced later without touching it.
-
-```
-src/agrodash/
-  catalog/      products, name aliases, units, markets
-  prices/       prices, field reports and validation
-  ingestion/    Google Drive and upload sources, parsers, normalizers, quarantine
-  forecasting/  backtesting, models, batch job, stored predictions
-  accounts/     users, roles, password hashing, login lockout
-  infra/        settings, database, migrations
-  web/          Streamlit pages (presentation only)
-```
-
-The migration runs in phases (F0 to F6); progress is tracked in [odd/tasks/agrodash-python-platform.md](odd/tasks/agrodash-python-platform.md). The FastAPI backend, the empty Flutter app and the original Streamlit app (`legacy/`) were removed; the old app can still be read in git history (`git show 75c584b:legacy/app.py`).
-
-## Features
-
-### For Farmers 👨‍🌾
-- **Current Prices**: Check real-time market prices.
-- **Harvest Calculator**: Estimate harvest value.
-- **Best Markets**: Find the most profitable markets.
-
-### For Professionals 📊
-- **Value Chain Analysis**: Track product flow.
-- **Price Forecasts**: next-month price with an 80% and 95% range, checked every run against statistical and machine-learning models.
-- **Statistical Analysis**: In-depth metrics.
-
-## Getting Started
-
-### Prerequisites
-- [uv](https://docs.astral.sh/uv/) (installs Python 3.12 automatically)
-- Docker & Docker Compose (optional): `docker compose up -d db` starts a local PostgreSQL after you set `POSTGRES_PASSWORD` in `.env`
-
-### Development
+## Quick start (Docker)
 
 ```bash
-uv sync                 # create .venv and install dependencies
-cp .env.example .env    # adjust settings if needed
-uv run alembic upgrade head   # create or upgrade the database schema
-uv run agrodash create-admin --email you@example.com --superadmin   # first account
-uv run agrodash ingest --drive   # load the official price history from Google Drive
-uv run agrodash forecast         # forecast every series ready to forecast
-uv run agrodash web              # web app on http://localhost:8501
-uv run pytest           # run the test suite
-uv run ruff check .     # lint
-uv run ruff format .    # format
+echo "POSTGRES_PASSWORD=$(openssl rand -hex 16)" > .env
+docker compose up -d                       # PostgreSQL, schema migration, web app on http://localhost:8501
+docker compose run --rm web create-admin --email you@example.com --superadmin
+docker compose run --rm weekly             # load the official reports from Google Drive and forecast (about 10 minutes)
 ```
+
+Production setup (HTTPS, the weekly schedule, backups and updates) is in **[GUIA_DESPLIEGUE.md](GUIA_DESPLIEGUE.md)**. How to use each page is in **[GUIA_USO.md](GUIA_USO.md)**.
+
+## Pages
+
+| Page | Who | What it answers |
+|---|---|---|
+| Precios | everyone | Latest price per market, history over a chosen period, comparison with other products, biggest four-week rises and falls, CSV downloads |
+| Pronóstico | everyone | Price in 4 weeks, 3 months and 12 months, with 80% and 95% ranges and whether that month is usually dear or cheap |
+| Temporadas | everyone | Months of high and low prices, year by year, and for the whole rubro |
+| Mercados | everyone | Cheapest and dearest markets, wholesale vs retail, what a harvest is worth |
+| Reportar precio | TECNICO and up | Field price reports, pending until an admin validates them |
+| Administración | ADMIN, SUPERADMIN | Load report files, validate field reports, quarantine, accounts |
+| Catálogo | ADMIN, SUPERADMIN | Merge products listed under different names, confirm name aliases, rename, retire |
+
+## How the data is handled
+
+- **Sources.** The ministry's wholesale and retail reports (`.csv`, `.xlsx`, `.xls`), from Google Drive (`agrodash ingest --drive`), files, or an upload in Administración. Loading the same file twice does nothing.
+- **Cleaning.** Spelling variants of products, rubros, units and week words are normalized; prices are converted to a base unit (pound, unit or liter). Clear export mistakes are repaired (unreadable dates between agreeing rows, "ñ" exported as ";", Excel error cells). Rows that cannot be trusted go to quarantine with a reason instead of being loaded.
+- **Products across report eras.** Reports renamed products over the years ("Ají/ Cachucha/ verde" became "Ají (Cachucha)/ verde/ primera"). Names with the same words are matched automatically; near matches are suggested in Catálogo → Repetidos, where an admin merges them so each product keeps one history. Sizes and grades are never merged.
+- **Weeks.** Reports publish weeks 1 to 4 of each month and sometimes a fifth. Forecasts count report periods, not calendar days.
+- **Quality.** `agrodash quality-report` summarizes rejections, unreviewed names, likely renames and which series are ready to forecast (two years of prices, 75% of weeks covered, a price in the last 8 weeks).
+
+## Forecasts
+
+The forecast is the last published price, with ranges from how the series moved before. Backtests on the official history decided this:
+
+| Horizon | Better than the last price? | 80% range held | 95% range held |
+|---|---|---|---|
+| 4 weeks | No model (AutoETS, Theta, gradient boosting) | about 82% | about 93% |
+| 3 months | No, not even adjusted by season | 84% | 96% |
+| 12 months | No | 82% | 92% |
+
+Weeks 1-4 use the last year of moves; months 2-12 use the whole history and need three years of prices. Every run re-measures the other models against the last price, so a change would show. Series that are not ready show "sin pronóstico" with the reason.
+
+## Development
+
+Requires [uv](https://docs.astral.sh/uv/) (it installs Python 3.12).
+
+```bash
+uv sync                                   # create .venv with every dependency
+cp .env.example .env                      # SQLite by default
+uv run agrodash migrate                   # create or update the schema
+uv run agrodash create-admin --email you@example.com --superadmin
+uv run agrodash ingest --drive            # or: uv run agrodash ingest mayorista.xlsx minorista.xls
+uv run agrodash forecast                  # --skip-benchmark takes seconds instead of minutes
+uv run agrodash web                       # http://localhost:8501
+uv run pytest                             # tests
+uv run ruff check . && uv run ruff format .
+```
+
+For PostgreSQL locally, `docker compose up -d db` and point `AGRODASH_DATABASE_URL` at it. Tests also run every database test on PostgreSQL when `AGRODASH_TEST_POSTGRES_URL` names a database ending in `_test` (CI does this).
+
+Schema changes go through Alembic: edit a model, run `uv run alembic revision --autogenerate -m "<change>"`, review the generated file in `src/agrodash/infra/migrations`.
 
 ### Configuration
 
-Settings are read from `AGRODASH_*` environment variables or `.env` (see [.env.example](.env.example)):
-
 | Variable | Default | Notes |
 |---|---|---|
-| `AGRODASH_ENV` | `development` | `development` or `production` |
-| `AGRODASH_DATABASE_URL` | `sqlite:///agrodash.db` | Production refuses to start on SQLite |
+| `AGRODASH_ENV` | `development` | `production` refuses to start on SQLite |
+| `AGRODASH_DATABASE_URL` | `sqlite:///agrodash.db` | `postgresql+psycopg://user:password@host:5432/agrodash` |
 | `AGRODASH_DRIVE_FILE_IDS` | the official wholesale and retail reports | Comma-separated ids of Drive files shared with "Anyone with the link" |
 
-### Loading price data
+### Layout
 
-`agrodash ingest` loads the official wholesale and retail price reports (`.csv`, `.xlsx` or `.xls`, in the ministry's layouts), either from files (`agrodash ingest mayorista.xlsx minorista.xls`) or from Google Drive (`agrodash ingest --drive`).
+```
+src/agrodash/
+  catalog/      products, families of names, aliases, units, markets
+  prices/       prices, field reports, seasons, market comparisons, page queries
+  ingestion/    Drive and file sources, parsers, normalizers, repairs, quarantine, quality
+  forecasting/  report-period series, forecasts and ranges, benchmark, batch job
+  accounts/     users, roles, Argon2id hashing, login lockout
+  infra/        settings, database, migrations
+  web/          Streamlit pages, charts and theme (presentation only)
+```
 
-- Spelling variants of product names, rubros, units and week words are normalized. New products and name aliases are drafted automatically and stay unreviewed until an admin confirms them.
-- Prices are converted to a base unit (pound, unit or liter). A series (product, market, wholesale or retail, base unit) never mixes base units; a product that changes how it is sold for at least four weeks (pepino retail moved from the pound to the piece in 2024) starts a new series, while a stray unit label is quarantined.
-- The reports' own mistakes are repaired where the intent is clear: an unreadable date between two rows that agree takes their date, an "ñ" exported as ";" is restored, Excel error cells count as missing values, and a damaged type column does not reject a sound row. A name listed twice in a row in the same week is two products the report does not tell apart (Berenjena Pompadur, Plátano Macho x Hembra); the second becomes "… (fila 2)" for an admin to name.
-- Rows that cannot be trusted are kept in quarantine with a reason instead of being loaded: unreadable date or price, unit without a size, unit that does not match its series, or a second price for the same week. `N/D`, blank and `0` cells are missing values, not errors.
-- `agrodash quality-report` summarizes the data: rejections by reason, unreviewed name aliases, products that look renamed between reports (for an admin to confirm), and which series are ready to forecast (at least 104 weeks, 75% of weeks 1-4 covered, a price in the last 8 weeks). `--series-csv FILE` exports every series with its coverage.
-- Technicians report field prices; they stay pending until an admin validates them, and reports more than 50% away from the recent official median are flagged.
-- `agrodash forecast` forecasts the next four report periods of every series ready to forecast. The forecast is the last price, with 80% and 95% ranges from how the series moved over the last year (in backtests they held about 82% and 93% of later prices); a backtest on the official history showed that one month ahead nothing beat the last price (selecting AutoETS, Theta or gradient boosting per series was worse on unseen periods). Each run re-measures those models against it and stores the scores, so a change would show. `--skip-benchmark` runs in seconds instead of minutes. Series that are not ready get no forecast ("sin pronóstico").
-- Loading the same file again does nothing. Another export of the same report (for example the `.csv` of an `.xlsx`) only adds prices that are not stored yet. A failed load is recorded with its error and can be retried.
+Business logic does not import Streamlit, so it is tested without it. The work is tracked in [odd/tasks/agrodash-python-platform.md](odd/tasks/agrodash-python-platform.md). The original Streamlit app, the FastAPI backend and the empty Flutter app were replaced; the old app stays readable in git history (`git show 75c584b:legacy/app.py`), and [INFORME_AUDITORIA.md](INFORME_AUDITORIA.md) records what was found and how it was resolved.
 
-Reading prices and forecasts needs no account. Accounts exist for people who report prices (TECNICO), manage data (ADMIN) or own the platform (SUPERADMIN). Passwords are hashed with Argon2id, and five failed logins lock an account for 15 minutes.
+## Accounts and security
 
-Schema changes go through Alembic migrations in `src/agrodash/infra/migrations`: after editing a model, run `uv run alembic revision --autogenerate -m "<change>"` and review the generated file. Tests run every schema test on SQLite, and also on PostgreSQL when `AGRODASH_TEST_POSTGRES_URL` is set (CI does this).
-
-## Documentation
-
-- **[INFORME_AUDITORIA.md](INFORME_AUDITORIA.md)**: Audit report.
-- Deployment and configuration guides are rewritten in phase F6; the current ones still describe the FastAPI + Flutter design.
-
-## Support
-
-For questions, please open an issue or contact the development team.
-
----
-Developed with ❤️ for the Dominican agricultural sector.
+Reading needs no account. TECNICO accounts report prices, ADMIN accounts manage data and technicians, SUPERADMIN accounts also manage admins. Passwords are hashed with Argon2id; five failed logins lock an account for 15 minutes; every page re-reads the signed-in account, so a deactivated account loses access at once.
