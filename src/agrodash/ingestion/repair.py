@@ -19,6 +19,10 @@ from agrodash.ingestion.readers import is_blank
 
 # How close a repeated name must be to count as a second product rather than a duplicate.
 ADJACENT_REPEAT_ROWS = 3
+# Units a retail price comes in; a wholesale price never does, except a few by the unit.
+RETAIL_UNITS = {"lb", "lib", "libra", "libras", "unidad", "und", "ud", "doc", "docena", "litro"}
+# Fewer rows than this are a stray row or two, not a pasted week.
+MIN_AVERAGE_BLOCK_ROWS = 5
 
 
 @dataclass(frozen=True)
@@ -83,6 +87,32 @@ def repair_rows(rows, first_line: int, date_columns: tuple[int, ...]) -> Repaire
         row[0] = name
         repaired.append((row_number, row))
     return RepairedRows(rows=repaired, originals=originals, dates_corrected=corrected)
+
+
+def retail_average_rows(
+    rows: list[tuple[int, list[object]]], date_columns: tuple[int, ...], unit_column: int
+) -> set[int]:
+    """Row numbers of the wholesale week blocks that hold retail averages instead.
+
+    A wholesale price comes in a sack, crate, hundred or quintal; a week where most rows
+    are priced per pound, unit, dozen or liter is the retail markets' average pasted into
+    the wholesale report (Quinta Julio 2025). A few products sold by the unit in a sound
+    week (Repollo) do not make it one.
+    """
+    flagged: set[int] = set()
+    block: list[tuple[int, bool]] = []
+    label = None
+    for row_number, row in [*rows, (None, None)]:
+        row_label = None if row is None else _date_label(row, date_columns)
+        if row_label != label:
+            retail = sum(is_retail for _, is_retail in block)
+            if len(block) >= MIN_AVERAGE_BLOCK_ROWS and retail * 2 > len(block):
+                flagged.update(number for number, _ in block)
+            block, label = [], row_label
+        if row is not None:
+            unit = fold(row[unit_column] if unit_column < len(row) else "").rstrip(".")
+            block.append((row_number, unit in RETAIL_UNITS))
+    return flagged
 
 
 def _readable_date(row: list[object], date_columns) -> bool:
