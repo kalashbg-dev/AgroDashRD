@@ -74,6 +74,25 @@ def history(product_id, price_type, base_unit, market_ids: tuple[int, ...], sinc
 
 
 @st.cache_data(ttl=CACHE_SECONDS, show_spinner=LOADING)
+def products_history(product_ids: tuple[int, ...], price_type, base_unit, since):
+    with database() as session:
+        return price_queries.products_history(
+            session, list(product_ids), price_type, base_unit, since
+        )
+
+
+@st.cache_data(ttl=CACHE_SECONDS, show_spinner=LOADING)
+def price_changes(price_type: PriceType):
+    with database() as session:
+        return price_queries.price_changes(session, price_type)
+
+
+def csv(frame) -> bytes:
+    """CSV that Excel opens with accents intact."""
+    return frame.to_csv(index=False).encode("utf-8-sig")
+
+
+@st.cache_data(ttl=CACHE_SECONDS, show_spinner=LOADING)
 def forecasts(product_id: int, price_type: PriceType):
     with database() as session:
         return forecast_queries.latest_forecasts(session, product_id, price_type)

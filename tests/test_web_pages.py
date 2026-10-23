@@ -241,3 +241,31 @@ def test_forecast_page_shows_a_year_month_by_month_with_the_season(years_of_pric
     assert len(table) == 15
     assert table["Fecha"].tolist()[4] == "11/2026"
     assert table.set_index("Fecha").loc["03/2027", "Temporada"] == "Alto"
+
+
+def test_prices_page_compares_products_lists_movers_and_downloads_csv(prices):
+    page = open_page("precios")
+    page.multiselect(key="compare_products").select("Arroz Antiguo").run()
+    page.segmented_control(key="compare_period").set_value("Todo").run()
+
+    assert not page.exception
+    assert len(page.get("vega_lite_chart")) == 2
+    movers = page.dataframe[1].value
+    assert movers["Producto"].tolist() == ["Arroz Selecto"]
+    assert movers["4 sem."].tolist() == ["+11%"]
+    assert {button.proto.label for button in page.get("download_button")} == {
+        "Descargar historia (CSV)",
+        "Descargar todos (CSV)",
+    }
+
+
+def test_seasons_page_warns_with_fewer_than_three_years(seasonal, cli_database):
+    with Session(cli_database) as session:
+        session.query(Price).filter(Price.observed_on < week_slot(2024, 1, 1)).delete()
+        session.commit()
+    st.cache_data.clear()
+
+    page = open_page("temporadas")
+
+    assert not page.exception
+    assert "menos de 3 años" in page.warning[0].value

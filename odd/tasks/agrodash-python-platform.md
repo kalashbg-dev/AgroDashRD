@@ -49,8 +49,8 @@ Assumption: the wholesale CSV belongs to "Mercado Nuevo" (legacy assumption) unt
 | T5g | S8.1 | inline | done (c443143) | product families: matching key, group suggestions, merge a group, ingestion resolves by key |
 | T5h | S8.2 | inline | done (4751654) | Temporadas page |
 | T5i | S8.3 | inline | done (db1da8f) | Mercados page with harvest value |
-| T5j | S8.4 | inline | done | medium and long term seasonal projections with backtest |
-| T5k | S8.5 | inline | pending | multi-select comparison, date range, Mayores cambios, CSV download |
+| T5j | S8.4 | inline | done (317298a) | medium and long term seasonal projections with backtest |
+| T5k | S8.5 | inline | done | multi-select comparison, date range, Mayores cambios, CSV download |
 | T6 | S7 | inline | pending | |
 
 Route evidence: phases depend on each other (no independent parallel units), so no writer trigger fires; work stays inline.
