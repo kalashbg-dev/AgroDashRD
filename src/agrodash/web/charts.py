@@ -220,3 +220,57 @@ def season_heatmap(index: pd.DataFrame, rows: str, theme: str, title: str) -> al
         # Streamlit fits the legend and the top axis inside the height: leave them room.
         .properties(height=26 * int(count) + 90)
     )
+
+
+def ranking_chart(ranking: pd.DataFrame, color: str, theme: str, unit: str) -> alt.Chart:
+    """Latest price per market as horizontal bars, cheapest on top, with the average."""
+    bars = (
+        alt.Chart(ranking)
+        .mark_bar(color=color, cornerRadiusEnd=4, size=14)
+        .encode(
+            x=alt.X("value:Q", axis=_axis(theme, f"RD$ por {unit}", format=",.2~f")),
+            y=alt.Y("market:N", sort=None, axis=_axis(theme, labelLimit=150)),
+            tooltip=[
+                alt.Tooltip("market:N", title="Mercado"),
+                alt.Tooltip("value:Q", title="RD$", format=",.2f"),
+                alt.Tooltip("difference:Q", title="Contra el promedio", format="+.0%"),
+            ],
+        )
+    )
+    average = (
+        alt.Chart(ranking)
+        .mark_rule(color=TEXT_MUTED[theme], strokeDash=[4, 4])
+        .encode(x="mean(value):Q")
+    )
+    # Streamlit fits the x axis inside the height: leave it room.
+    return (bars + average).properties(height=40 * len(ranking) + 70)
+
+
+def spread_chart(spread: pd.DataFrame, theme: str, unit: str) -> alt.Chart:
+    """Monthly wholesale and retail prices of one product, two 2px lines."""
+    names = {"wholesale": "Mayorista", "retail": "Minorista"}
+    long = spread.melt("month", ["wholesale", "retail"], var_name="type", value_name="value")
+    long["type"] = long["type"].map(names)
+    return (
+        alt.Chart(long)
+        .mark_line(strokeWidth=2, point=alt.OverlayMarkDef(size=30, filled=True))
+        .encode(
+            x=alt.X("month:T", axis=_axis(theme, format="%b %Y")),
+            y=alt.Y(
+                "value:Q",
+                axis=_axis(theme, f"RD$ por {unit}", format=",.2~f"),
+                scale=alt.Scale(zero=False),
+            ),
+            color=alt.Color(
+                "type:N",
+                scale=alt.Scale(domain=list(names.values()), range=PALETTE[theme][:2]),
+                legend=alt.Legend(title=None, orient="top", labelColor=TEXT_MUTED[theme]),
+            ),
+            tooltip=[
+                alt.Tooltip("type:N", title="Precio"),
+                alt.Tooltip("month:T", title="Mes", format="%m/%Y"),
+                alt.Tooltip("value:Q", title="RD$", format=",.2f"),
+            ],
+        )
+        .properties(height=HEIGHT)
+    )

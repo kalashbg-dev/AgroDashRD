@@ -47,8 +47,8 @@ Assumption: the wholesale CSV belongs to "Mercado Nuevo" (legacy assumption) unt
 | T5e | S6 | inline | done | Admin: upload and ingest, quarantine, validate field reports, users |
 | T5f | S6 | inline | done | Admin catalog: review aliases, rename and merge products (rename candidates, "(fila 2)"), activate or deactivate products and markets |
 | T5g | S8.1 | inline | done (c443143) | product families: matching key, group suggestions, merge a group, ingestion resolves by key |
-| T5h | S8.2 | inline | done | Temporadas page |
-| T5i | S8.3 | inline | pending | Mercados page with harvest value |
+| T5h | S8.2 | inline | done (4751654) | Temporadas page |
+| T5i | S8.3 | inline | done | Mercados page with harvest value |
 | T5j | S8.4 | inline | pending | medium and long term seasonal projections with backtest |
 | T5k | S8.5 | inline | pending | multi-select comparison, date range, Mayores cambios, CSV download |
 | T6 | S7 | inline | pending | |

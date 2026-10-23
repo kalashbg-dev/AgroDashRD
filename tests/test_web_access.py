@@ -7,15 +7,33 @@ from agrodash.web.access import can_open, landing_page, visible_pages
 @pytest.mark.parametrize(
     ("role", "pages"),
     [
-        (None, ["precios", "pronostico", "temporadas", "ingresar"]),
-        (Role.TECNICO, ["precios", "pronostico", "temporadas", "ingresar", "reportar"]),
+        (None, ["precios", "pronostico", "temporadas", "mercados", "ingresar"]),
+        (Role.TECNICO, ["precios", "pronostico", "temporadas", "mercados", "ingresar", "reportar"]),
         (
             Role.ADMIN,
-            ["precios", "pronostico", "temporadas", "ingresar", "reportar", "admin", "catalogo"],
+            [
+                "precios",
+                "pronostico",
+                "temporadas",
+                "mercados",
+                "ingresar",
+                "reportar",
+                "admin",
+                "catalogo",
+            ],
         ),
         (
             Role.SUPERADMIN,
-            ["precios", "pronostico", "temporadas", "ingresar", "reportar", "admin", "catalogo"],
+            [
+                "precios",
+                "pronostico",
+                "temporadas",
+                "mercados",
+                "ingresar",
+                "reportar",
+                "admin",
+                "catalogo",
+            ],
         ),
     ],
 )

@@ -167,3 +167,33 @@ def test_seasons_page_needs_a_full_year_of_prices(prices):
 
     assert not page.exception
     assert "año completo" in page.info[0].value
+
+
+def test_markets_page_ranks_markets_values_a_harvest_and_explains_a_missing_spread(prices):
+    page = open_page("mercados")
+
+    assert not page.exception
+    assert "de diferencia" in page.markdown[0].value
+    page.number_input[0].set_value(2.0).run()
+    page.selectbox[2].select("quintales (100 lb)").run()
+    harvest = page.dataframe[0].value
+    assert harvest["Valor"].tolist() == ["RD$ 8,400.00", "RD$ 8,400.00"]
+    assert "mismos meses" in page.info[0].value
+
+
+def test_markets_page_compares_wholesale_and_retail_by_month(prices, cli_database):
+    with Session(cli_database) as session:
+        rice = session.query(Product).filter_by(name="Arroz Selecto").one()
+        market = Market(name="Mercado Mayorista", kind=MarketKind.WHOLESALE)
+        unit = session.query(Unit).one()
+        wholesale = price(rice, market, unit, week_slot(2026, 9, 1), 30)
+        wholesale.price_type = PriceType.WHOLESALE
+        session.add_all([market, wholesale])
+        session.commit()
+    st.cache_data.clear()
+
+    page = open_page("mercados")
+
+    assert not page.exception
+    assert "09/2026" in page.markdown[1].value
+    assert len(page.get("vega_lite_chart")) == 2

@@ -11,6 +11,7 @@ PAGE_ACCESS = {
     "precios": PUBLIC,
     "pronostico": PUBLIC,
     "temporadas": PUBLIC,
+    "mercados": PUBLIC,
     # "Ingresar" for visitors, "Mi cuenta" (and signing out) once signed in.
     "ingresar": PUBLIC,
     "reportar": REPORTERS,

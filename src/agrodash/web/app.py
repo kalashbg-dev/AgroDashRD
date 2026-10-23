@@ -14,6 +14,7 @@ TITLES = {
     "precios": ("Precios", ":material/sell:"),
     "pronostico": ("Pronóstico", ":material/trending_up:"),
     "temporadas": ("Temporadas", ":material/calendar_month:"),
+    "mercados": ("Mercados", ":material/storefront:"),
     "ingresar": ("Mi cuenta", ":material/account_circle:")
     if current_user()
     else ("Ingresar", ":material/login:"),
