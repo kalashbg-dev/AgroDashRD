@@ -50,6 +50,7 @@ uv run alembic upgrade head   # create or upgrade the database schema
 uv run agrodash create-admin --email you@example.com --superadmin   # first account
 uv run agrodash ingest --drive   # load the official price history from Google Drive
 uv run agrodash forecast         # forecast every series ready to forecast
+uv run agrodash web              # web app on http://localhost:8501
 uv run pytest           # run the test suite
 uv run ruff check .     # lint
 uv run ruff format .    # format

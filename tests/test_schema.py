@@ -293,3 +293,49 @@ def test_dropping_market_location_works_on_a_database_with_prices(tmp_path):
     with engine.connect() as connection:
         assert connection.execute(text("SELECT count(*) FROM prices")).scalar() == 1
     engine.dispose()
+
+
+def seeded_before_role_change(tmp_path, role="TECNICO"):
+    url = f"sqlite:///{tmp_path / 'roles.db'}"
+    command.upgrade(alembic_config(url), "9b40c1b7dccc")
+    engine = create_db_engine(url)
+    with engine.begin() as connection:
+        connection.execute(
+            text(
+                "INSERT INTO users (id, email, password_hash, role, is_active,"
+                " failed_login_attempts) VALUES (1, 'a@example.com', 'x', :role, 1, 0);"
+            ),
+            {"role": role},
+        )
+        connection.execute(
+            text(
+                "INSERT INTO ingestion_runs (id, file_name, file_sha256, trigger, status,"
+                " started_by_id, rows_read, prices_loaded, rows_rejected, values_missing,"
+                " rows_corrected)"
+                " VALUES (1, 'a.csv', 'x', 'upload', 'succeeded', 1, 0, 0, 0, 0, 0);"
+            )
+        )
+    return url, engine
+
+
+def test_removing_the_farmer_role_keeps_referenced_users(tmp_path):
+    url, engine = seeded_before_role_change(tmp_path)
+
+    command.upgrade(alembic_config(url), "head")
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT role FROM users")).scalar() == "TECNICO"
+    with pytest.raises(IntegrityError), engine.begin() as connection:
+        connection.execute(text("UPDATE users SET role = 'AGRICULTOR'"))
+    engine.dispose()
+
+
+def test_removing_the_farmer_role_stops_when_farmer_accounts_exist(tmp_path):
+    url, engine = seeded_before_role_change(tmp_path, role="AGRICULTOR")
+
+    with pytest.raises(RuntimeError, match="1 AGRICULTOR account"):
+        command.upgrade(alembic_config(url), "head")
+
+    with engine.connect() as connection:
+        assert connection.execute(text("SELECT role FROM users")).scalar() == "AGRICULTOR"
+    engine.dispose()

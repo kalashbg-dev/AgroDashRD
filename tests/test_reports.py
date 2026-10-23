@@ -104,12 +104,11 @@ def test_reporting_roles_can_report(session, catalog, users, role):
     assert report(session, catalog, users[role]).status is PriceStatus.PENDING
 
 
-def test_farmers_and_inactive_accounts_cannot_report(session, catalog, users):
+def test_inactive_accounts_cannot_report(session, catalog, users):
     users[Role.TECNICO].is_active = False
 
-    for role in (Role.AGRICULTOR, Role.TECNICO):
-        with pytest.raises(ReportError, match="cannot report prices"):
-            report(session, catalog, users[role])
+    with pytest.raises(ReportError, match="cannot report prices"):
+        report(session, catalog, users[Role.TECNICO])
     assert session.query(Price).filter_by(source=PriceSource.FIELD_REPORT).count() == 0
 
 

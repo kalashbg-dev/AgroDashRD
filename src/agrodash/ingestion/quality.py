@@ -39,6 +39,8 @@ class SeriesCoverage:
     weeks: int
     coverage: float
     ready: bool
+    # Why it is not ready: "inactive", "short", "sparse", "stale"; empty when ready.
+    not_ready: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -89,7 +91,7 @@ def build_report(session: Session) -> QualityReport:
         units=session.scalar(select(func.count(Unit.id))),
         latest_observation=latest,
         series=series_coverage(session),
-        rename_candidates=_rename_candidates(session),
+        rename_candidates=rename_candidates(session),
     )
 
 
@@ -109,7 +111,7 @@ def _rejections(session: Session) -> dict[str, int]:
     return {str(reason): count for reason, count in rows}
 
 
-def _rename_candidates(session: Session) -> list[tuple[str, str, int]]:
+def rename_candidates(session: Session) -> list[tuple[str, str, int]]:
     """(old name, new name, days between) for products that look renamed."""
     spans = session.execute(
         select(
@@ -202,6 +204,16 @@ def series_coverage(session: Session) -> list[SeriesCoverage]:
     ) in rows:
         months = (last_on.year - first_on.year) * 12 + last_on.month - first_on.month + 1
         coverage = counted_weeks / (4 * months)
+        reasons = tuple(
+            reason
+            for reason, applies in (
+                ("inactive", not (product_active and market_active)),
+                ("short", weeks < MIN_WEEKS),
+                ("sparse", coverage < MIN_COVERAGE),
+                ("stale", latest_by_type[price_type] - last_on > MAX_STALENESS),
+            )
+            if applies
+        )
         series.append(
             SeriesCoverage(
                 product_id=product_id,
@@ -214,12 +226,46 @@ def series_coverage(session: Session) -> list[SeriesCoverage]:
                 last_on=last_on,
                 weeks=weeks,
                 coverage=coverage,
-                # An admin retires a product or market from forecasting by deactivating it.
-                ready=product_active
-                and market_active
-                and weeks >= MIN_WEEKS
-                and coverage >= MIN_COVERAGE
-                and latest_by_type[price_type] - last_on <= MAX_STALENESS,
+                ready=not reasons,
+                not_ready=reasons,
             )
         )
     return series
+
+
+@dataclass(frozen=True)
+class QuarantineRow:
+    file_name: str
+    row_number: int
+    reason: str
+    detail: str | None
+    raw_values: str
+
+
+def quarantine(
+    session: Session, reason: str | None = None, limit: int = 200
+) -> list[QuarantineRow]:
+    """Rejected rows of the loads the quality report counts, newest load first."""
+    query = (
+        select(
+            IngestionRun.file_name,
+            QuarantinedRow.row_number,
+            QuarantinedRow.reason,
+            QuarantinedRow.detail,
+            QuarantinedRow.raw_values,
+        )
+        .join(IngestionRun)
+        .where(IngestionRun.status == IngestionStatus.SUCCEEDED, IngestionRun.prices_loaded > 0)
+        .order_by(IngestionRun.id.desc(), QuarantinedRow.row_number)
+        .limit(limit)
+    )
+    if reason:
+        query = query.where(QuarantinedRow.reason == reason)
+    return [
+        QuarantineRow(file_name, row_number, str(row_reason), detail, raw_values)
+        for file_name, row_number, row_reason, detail, raw_values in session.execute(query)
+    ]
+
+
+def recent_runs(session: Session, limit: int = 10) -> list[IngestionRun]:
+    return list(session.scalars(select(IngestionRun).order_by(IngestionRun.id.desc()).limit(limit)))

@@ -1,0 +1,10 @@
+[server]
+# Matches the ingestion limit for uploaded price reports.
+maxUploadSize = 50
+enableXsrfProtection = true
+
+[browser]
+gatherUsageStats = false
+
+[client]
+toolbarMode = "minimal"
