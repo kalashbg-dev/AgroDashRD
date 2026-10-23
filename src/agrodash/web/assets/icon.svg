@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 36 36" role="img" aria-label="AgroDashRD">
+  <rect x="0" y="0" width="36" height="36" rx="10" fill="#2f6b45"/>
+  <path d="M7 26 L14 20 L20 23 L29 13" fill="none" stroke="#faf8f3" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M20 23 C20 15 22 10 27 8 C27 13 25 17 20 19" fill="#b9e3c6"/>
+</svg>

@@ -8,3 +8,40 @@ gatherUsageStats = false
 
 [client]
 toolbarMode = "minimal"
+
+# Theme: warm field tones with a deep green accent. Charts keep their own validated
+# palette (web/charts.py); these colors dress the widgets and surfaces around them.
+[theme]
+font = "Inter:https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap, sans-serif"
+headingFont = "Fraunces:https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600&display=swap, serif"
+headingFontWeights = 600
+baseRadius = "0.75rem"
+buttonRadius = "full"
+showWidgetBorder = true
+
+[theme.light]
+primaryColor = "#2f6b45"
+backgroundColor = "#faf8f3"
+secondaryBackgroundColor = "#f1ede3"
+textColor = "#1f2a24"
+borderColor = "#e3ddd0"
+dataframeHeaderBackgroundColor = "#f1ede3"
+linkColor = "#2f6b45"
+
+[theme.light.sidebar]
+backgroundColor = "#f3efe6"
+secondaryBackgroundColor = "#e9e3d6"
+
+[theme.dark]
+# White button text on it reaches 4.8:1; links keep the lighter green, 8.8:1 on the page.
+primaryColor = "#368052"
+backgroundColor = "#14171a"
+secondaryBackgroundColor = "#1f2429"
+textColor = "#ecebe6"
+borderColor = "#2e353b"
+dataframeHeaderBackgroundColor = "#1f2429"
+linkColor = "#7cc596"
+
+[theme.dark.sidebar]
+backgroundColor = "#101316"
+secondaryBackgroundColor = "#1a1f23"

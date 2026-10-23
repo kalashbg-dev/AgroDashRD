@@ -52,7 +52,7 @@ Assumption: the wholesale CSV belongs to "Mercado Nuevo" (legacy assumption) unt
 | T5j | S8.4 | inline | done (317298a) | medium and long term seasonal projections with backtest |
 | T5k | S8.5 | inline | done | multi-select comparison, date range, Mayores cambios, CSV download |
 | T6a | S7 | inline | done | hardening: midnight-proof report test, F5b review advisories (resolver word-set ties, untested spread chart, axis format, monthly points) |
-| T6b | S7 | inline | pending | visual theme: Streamlit theme and light CSS with personality, checked at 390 px light and dark |
+| T6b | S7 | inline | done | visual theme: Streamlit theme and light CSS with personality, checked at 390 px light and dark |
 | T6c | S7 | inline | pending | one Docker image for the app and the jobs (ingest, forecast), compose with PostgreSQL, weekly job |
 | T6d | S7 | inline | pending | docs: README, deploy guide, user guide per page, audit report, A2 merge note |
 | T6e | S7 | inline | pending | final code-review and security-review of the whole repo, native review, close |
