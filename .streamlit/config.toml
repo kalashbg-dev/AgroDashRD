@@ -5,6 +5,8 @@ enableXsrfProtection = true
 
 [browser]
 gatherUsageStats = false
+# Without it, Streamlit looks up the server's public IP at startup to print a URL.
+serverAddress = "localhost"
 
 [client]
 toolbarMode = "minimal"

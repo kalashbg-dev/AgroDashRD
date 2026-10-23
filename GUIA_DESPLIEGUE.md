@@ -17,7 +17,7 @@ AgroDashRD se despliega como **una sola imagen Docker** que sirve la aplicación
 
    ```bash
    docker compose up -d
-   docker compose ps          # db y web "healthy"; migrate "exited (0)"
+   docker compose ps          # db y web "healthy" (la web tarda unos segundos); migrate "exited (0)"
    ```
 
 4. Crea la primera cuenta (la contraseña se pide por teclado, mínimo 12 caracteres):
@@ -78,13 +78,13 @@ La imagen fija `AGRODASH_ENV=production`, que se niega a arrancar si la base no 
 Copia diaria comprimida, con cron (todos los días a las 02:00):
 
 ```
-0 2 * * *  cd /srv/agrodash && docker compose exec -T db pg_dump -U agrodash agrodash | gzip > /srv/backups/agrodash-$(date +\%F).sql.gz
+0 2 * * *  cd /srv/agrodash && docker compose exec -T db sh -c 'pg_dump -U "$POSTGRES_USER" "$POSTGRES_DB"' | gzip > /srv/backups/agrodash-$(date +\%F).sql.gz
 ```
 
 Para restaurar en una base vacía:
 
 ```bash
-gunzip -c /srv/backups/agrodash-AAAA-MM-DD.sql.gz | docker compose exec -T db psql -U agrodash agrodash
+gunzip -c /srv/backups/agrodash-AAAA-MM-DD.sql.gz | docker compose exec -T db sh -c 'psql -U "$POSTGRES_USER" "$POSTGRES_DB"'
 ```
 
 Lo que no se puede regenerar son las cuentas (`users`), los reportes de campo y las decisiones del catálogo (`products`, `product_aliases`). Precios oficiales y pronósticos se reconstruyen con la tarea semanal.
