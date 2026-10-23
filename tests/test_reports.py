@@ -117,11 +117,14 @@ def test_inactive_accounts_cannot_report(session, catalog, users):
     [
         ({"amount": "0"}, "Price must be greater than zero"),
         ({"amount": "-3"}, "Price must be greater than zero"),
-        ({"observed_on": date.today() + timedelta(days=1)}, "cannot be in the future"),
+        # Resolved when the test runs, not at collection: a run crossing midnight
+        # would otherwise report "tomorrow" as today.
+        ({"observed_on": lambda: local_today() + timedelta(days=1)}, "cannot be in the future"),
         ({"unit": "piece"}, "Arroz Selecto retail prices are per lb; choose a unit in lb"),
     ],
 )
 def test_invalid_reports_are_refused(session, catalog, users, changes, message):
+    changes = {key: value() if callable(value) else value for key, value in changes.items()}
     with pytest.raises(ReportError, match=message):
         report(session, catalog, users[Role.TECNICO], **changes)
 

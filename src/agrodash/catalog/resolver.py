@@ -31,7 +31,12 @@ class CatalogResolver:
         self._products = {
             alias.raw_name: alias.product for alias in session.scalars(select(ProductAlias))
         }
-        self._by_words = {word_set_key(key): product for key, product in self._products.items()}
+        self._by_words: dict[str, Product] = {}
+        for key, product in self._products.items():
+            # Names sharing their words may belong to a retired product: prefer the active one.
+            known = self._by_words.get(word_set_key(key))
+            if known is None or (product.is_active and not known.is_active):
+                self._by_words[word_set_key(key)] = product
         self._units = {alias.raw_text: alias.unit for alias in session.scalars(select(UnitAlias))}
         self._units_by_code = {unit.code: unit for unit in session.scalars(select(Unit))}
         self._markets = {market.name: market for market in session.scalars(select(Market))}

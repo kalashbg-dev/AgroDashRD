@@ -106,3 +106,25 @@ def test_the_same_words_in_another_order_join_the_existing_product(session):
 
     assert reordered is beans
     assert session.query(Product).count() == 1
+
+
+def test_a_reordered_name_joins_the_active_product_when_a_retired_one_has_the_same_words(
+    session,
+):
+    active = Product(name="Gira pinta roja", category="Legumbres", base_unit=BaseUnit.POUND)
+    retired = Product(
+        name="Pinta gira roja", category="Legumbres", base_unit=BaseUnit.POUND, is_active=False
+    )
+    session.add_all(
+        [
+            active,
+            retired,
+            ProductAlias(raw_name="gira pinta roja", product=active),
+            ProductAlias(raw_name="pinta gira roja", product=retired),
+        ]
+    )
+    session.commit()
+
+    found = CatalogResolver(session).product("Roja (Pinta) gira", "Legumbres", BaseUnit.POUND)
+
+    assert found is active
