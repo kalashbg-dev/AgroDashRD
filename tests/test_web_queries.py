@@ -9,7 +9,13 @@ from agrodash.forecasting.queries import latest_forecasts
 from agrodash.ingestion import quality
 from agrodash.ingestion.normalize import week_slot
 from agrodash.prices.models import Price, PriceSource, PriceStatus, PriceType
-from agrodash.prices.queries import latest_prices, price_history, products_with_prices
+from agrodash.prices.queries import (
+    latest_prices,
+    price_changes,
+    price_history,
+    products_history,
+    products_with_prices,
+)
 
 RETAIL = PriceType.RETAIL
 
@@ -156,3 +162,45 @@ def test_series_say_why_they_are_not_ready(session, catalog, monkeypatch):
 
     assert reasons[("Arroz Selecto", "Mercado Nuevo")] == ("short", "sparse")
     assert reasons[("Mango", "Mercado Los Mina")] == ("sparse",)
+
+
+def test_price_changes_use_the_four_week_rule_and_skip_stale_and_retired_products(session, catalog):
+    day = date(2026, 9, 22)
+    for market, before, now in (("nuevo", 40, 50), ("mina", 40, 60)):
+        add(session, catalog, "rice", market, day - timedelta(weeks=4), before)
+        add(session, catalog, "rice", market, day, now)
+    add(session, catalog, "mango", "nuevo", day - timedelta(weeks=5), 20)
+    add(session, catalog, "mango", "nuevo", day, 15)
+    # Retired, and a price too old to be current: neither is listed.
+    add(session, catalog, "retired", "nuevo", day - timedelta(weeks=4), 10)
+    add(session, catalog, "retired", "nuevo", day, 30)
+    session.commit()
+
+    changes = price_changes(session, RETAIL)
+
+    assert [(c.product, c.value, round(c.change, 3)) for c in changes] == [
+        ("Arroz Selecto", 55.0, 0.375),
+        ("Mango", 15.0, -0.25),
+    ]
+
+
+def test_products_history_averages_markets_per_week(session, catalog):
+    day = date(2026, 9, 22)
+    add(session, catalog, "rice", "nuevo", day, 40)
+    add(session, catalog, "rice", "mina", day, 50)
+    add(session, catalog, "mango", "nuevo", day, 12)
+    add(session, catalog, "mango", "nuevo", day - timedelta(weeks=60), 9)
+    session.commit()
+
+    points = products_history(
+        session,
+        [catalog["rice"].id, catalog["mango"].id],
+        RETAIL,
+        "lb",
+        day - timedelta(weeks=8),
+    )
+
+    assert [(p.market, p.observed_on, p.value) for p in points] == [
+        ("Arroz Selecto", day, 45.0),
+        ("Mango", day, 12.0),
+    ]
