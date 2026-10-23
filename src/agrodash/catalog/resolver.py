@@ -10,7 +10,13 @@ from agrodash.catalog.models import (
     Unit,
     UnitAlias,
 )
-from agrodash.ingestion.normalize import clean_name, name_key, parse_unit, same_product_name
+from agrodash.ingestion.normalize import (
+    clean_name,
+    name_key,
+    parse_unit,
+    same_product_name,
+    word_set_key,
+)
 
 
 class CatalogResolver:
@@ -25,6 +31,7 @@ class CatalogResolver:
         self._products = {
             alias.raw_name: alias.product for alias in session.scalars(select(ProductAlias))
         }
+        self._by_words = {word_set_key(key): product for key, product in self._products.items()}
         self._units = {alias.raw_text: alias.unit for alias in session.scalars(select(UnitAlias))}
         self._units_by_code = {unit.code: unit for unit in session.scalars(select(Unit))}
         self._markets = {market.name: market for market in session.scalars(select(Market))}
@@ -34,7 +41,7 @@ class CatalogResolver:
         key = name_key(raw_name)
         if key in self._products:
             return self._products[key]
-        product = next(
+        product = self._by_words.get(word_set_key(key)) or next(
             (
                 known
                 for known_key, known in self._products.items()
@@ -49,6 +56,7 @@ class CatalogResolver:
             self._session.add(product)
         self._session.add(ProductAlias(raw_name=key, product=product, reviewed=False))
         self._products[key] = product
+        self._by_words.setdefault(word_set_key(key), product)
         return product
 
     def unit(self, raw_text: str) -> Unit | None:

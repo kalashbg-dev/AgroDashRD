@@ -101,3 +101,39 @@ def test_a_product_is_renamed_and_errors_are_in_spanish(setup):
     with Session(setup["engine"]) as session:
         names = {p.name for p in session.query(Product)}
     assert "Cilantro (Long Standing), grande" in names
+
+
+def test_safe_families_are_merged_together_and_suggestions_one_by_one(setup):
+    with Session(setup["engine"]) as session:
+        market = session.query(Market).one()
+        unit = session.query(Unit).one()
+        for name, day in (
+            ("Habichuela pinta (Gira)", date(2017, 8, 1)),
+            ("Habichuela gira (Pinta)", date(2018, 1, 1)),
+        ):
+            product = Product(name=name, category="Legumbres", base_unit=BaseUnit.UNIT)
+            session.add(product)
+            session.add(
+                Price(
+                    product=product,
+                    market=market,
+                    unit=unit,
+                    observed_on=day,
+                    price_type=PriceType.RETAIL,
+                    source=PriceSource.OFFICIAL,
+                    status=PriceStatus.VALIDATED,
+                    amount=Decimal(25),
+                    price_per_base_unit=Decimal(25),
+                )
+            )
+        session.commit()
+    page = open_page(setup["user"])
+
+    assert "1 grupo seguro" in page.markdown[0].value
+    page.button(key="merge_safe_families").click().run()
+
+    assert not page.exception
+    with Session(setup["engine"]) as session:
+        active = [p.name for p in session.query(Product).filter_by(is_active=True)]
+    assert "Habichuela gira (Pinta)" in active
+    assert "Habichuela pinta (Gira)" not in active

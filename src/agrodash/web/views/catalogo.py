@@ -4,11 +4,13 @@ from agrodash.accounts.models import User
 from agrodash.catalog.admin import (
     CatalogError,
     confirm_alias,
+    merge_family,
     merge_products,
     rename_product,
     set_market_active,
     set_product_active,
 )
+from agrodash.catalog.families import FamilyMember, product_families
 from agrodash.catalog.models import Market, Product, ProductAlias
 from agrodash.ingestion.quality import rename_candidates
 from agrodash.web.messages import spanish
@@ -17,9 +19,34 @@ from agrodash.web.state import current_user, database, require
 require("catalogo")
 actor_id = current_user()["id"]
 st.title("Catálogo")
-renames_tab, aliases_tab, products_tab, markets_tab = st.tabs(
-    ["Renombres", "Nombres", "Productos", "Mercados"]
+families_tab, renames_tab, aliases_tab, products_tab, markets_tab = st.tabs(
+    ["Repetidos", "Renombres", "Nombres", "Productos", "Mercados"]
 )
+
+
+def merge(families) -> None:
+    """Merge each family into its target and list the names that could not be merged."""
+    with database() as session:
+        actor = session.get(User, actor_id)
+        problems = [problem for family in families for problem in run_merge(session, actor, family)]
+    st.cache_data.clear()
+    st.session_state["family_problems"] = problems
+    st.rerun()
+
+
+def run_merge(session, actor, family):
+    try:
+        return merge_family(session, actor, family.target.id, [m.id for m in family.members])
+    except CatalogError as error:
+        return [(family.target.name, str(error))]
+
+
+def plural(count: int, one: str, many: str) -> str:
+    return f"{count} {one if count == 1 else many}"
+
+
+def span(member: FamilyMember) -> str:
+    return f"{member.first:%m/%Y} – {member.last:%m/%Y}, {member.prices} precios"
 
 
 def run(action, *args, **kwargs) -> bool:
@@ -50,6 +77,37 @@ with database() as session:
     ]
     markets = [(m.id, m.name, m.is_active) for m in session.query(Market).order_by(Market.name)]
     product_rows = [(p.id, p.name, p.is_active) for p in products]
+    families = product_families(session)
+
+with families_tab:
+    safe = [family for family in families if family.safe]
+    suggested = [family for family in families if not family.safe]
+    st.markdown(
+        f"**{plural(len(safe), 'grupo seguro', 'grupos seguros')}** y "
+        f"{plural(len(suggested), 'sugerido', 'sugeridos')}: el mismo producto con nombres "
+        "distintos según la época. Al unirlos, toda su historia queda en el nombre más reciente "
+        "y los demás se retiran."
+    )
+    for name, reason in st.session_state.pop("family_problems", []):
+        st.warning(f"{name}: {spanish(reason)}")
+    if safe and st.button(
+        f"Unir {plural(len(safe), 'grupo seguro', 'grupos seguros')}",
+        key="merge_safe_families",
+        type="primary",
+    ):
+        merge(safe)
+    if suggested:
+        st.caption(
+            'Sugeridos: difieren en un "primera" que los reportes viejos omitían o en una '
+            "letra. Revisa que sean el mismo producto antes de unirlos."
+        )
+    for family in suggested:
+        with st.container(border=True):
+            st.markdown(f"**{family.target.name}** · {span(family.target)}")
+            for member in family.members[1:]:
+                st.caption(f"{member.name} · {span(member)}")
+            if st.button("Unir", key=f"merge_family_{family.target.id}"):
+                merge([family])
 
 with renames_tab:
     st.caption(

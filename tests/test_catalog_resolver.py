@@ -95,3 +95,14 @@ def test_markets_are_created_once(session):
 
     assert first is second
     assert session.query(Market).one().kind is MarketKind.WHOLESALE
+
+
+def test_the_same_words_in_another_order_join_the_existing_product(session):
+    resolver = CatalogResolver(session)
+
+    beans = resolver.product("Habichuela pinta (Gira)/ primera", "Legumbres", BaseUnit.POUND)
+    reordered = resolver.product("Habichuela gira (Pinta)/ primera", "Legumbres", BaseUnit.POUND)
+    session.commit()
+
+    assert reordered is beans
+    assert session.query(Product).count() == 1
