@@ -81,6 +81,7 @@ La sección 5 quedó superada: el backend FastAPI y la app Flutter se retiraron 
 | Autenticación ficticia (2.2.4) | Resuelto | Cuentas en base de datos, contraseñas Argon2id, bloqueo tras 5 intentos, roles TECNICO, ADMIN y SUPERADMIN verificados en el servidor en cada página |
 | Seguridad nula (2.3) | Resuelto | Lo anterior, más protección XSRF, base y web publicadas solo en localhost detrás de un proxy HTTPS, contenedor sin privilegios y revisiones de seguridad por fase |
 | Escalabilidad de Streamlit (2.3) | Mitigado | Los pronósticos se calculan una vez por semana y se guardan; las consultas de las páginas se guardan en caché 10 minutos |
+| Despliegue sin automatizar (5.3.3) | Resuelto | Una imagen Docker verificada de forma independiente (usuario sin privilegios, imágenes base fijadas), compose con migración automática antes de la web y de la tarea semanal, y CI que corre lint y pruebas sobre SQLite y PostgreSQL en cada cambio |
 | Compilación móvil (3) | Decisión | Web adaptada al teléfono en lugar de app nativa; se revisó cada página a 390 px de ancho, en modo claro y oscuro |
 
 ### Problemas de datos del sistema original, corregidos

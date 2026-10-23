@@ -8,11 +8,13 @@ Agricultural prices of the Dominican Republic, readable on a phone: the latest o
 
 ## Quick start (Docker)
 
+Needs Docker Engine 20.10 or later with Compose v2. The first `up` builds the image (1.3 GB, a few minutes).
+
 ```bash
 echo "POSTGRES_PASSWORD=$(openssl rand -hex 16)" > .env
 docker compose up -d                       # PostgreSQL, schema migration, web app on http://localhost:8501
 docker compose run --rm web create-admin --email you@example.com --superadmin
-docker compose run --rm weekly             # load the official reports from Google Drive and forecast (about 10 minutes)
+docker compose run --rm weekly             # migrate, load the official reports from Google Drive, forecast (about 10 minutes)
 ```
 
 Production setup (HTTPS, the weekly schedule, backups and updates) is in **[GUIA_DESPLIEGUE.md](GUIA_DESPLIEGUE.md)**. How to use each page is in **[GUIA_USO.md](GUIA_USO.md)**.
