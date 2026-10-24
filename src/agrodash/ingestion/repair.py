@@ -7,6 +7,7 @@ database or a file.
 from collections import Counter
 from dataclasses import dataclass
 from decimal import Decimal
+from statistics import median
 
 from agrodash.ingestion.normalize import (
     InvalidValue,
@@ -627,3 +628,14 @@ def unit_in_effect(parsed, amounts, previous: dict[str, UnitSighting]):
     if abs(middle[1] / middle[2].amount - 1) > DRIFT_TOLERANCE:
         return parsed
     return middle[2].unit
+
+
+def peer_median(values):
+    """A row's mid price level, or None when the row has no pair to judge against.
+
+    A spatial reference (audit M3) needs at least two peers: with a single priced
+    row cell nothing distinguishes a slipped digit from a real one-off price.
+    """
+    if len(values) < 2:
+        return None
+    return median(values)
