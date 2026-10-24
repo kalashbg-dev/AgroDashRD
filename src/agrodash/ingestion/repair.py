@@ -125,3 +125,33 @@ def _readable_date(row: list[object], date_columns) -> bool:
 
 def _date_label(row: list[object], date_columns) -> tuple[str, ...]:
     return tuple(fold(row[column]) if column < len(row) else "" for column in date_columns)
+
+
+# Wholesale measure words: a retail row carrying one of these (or N/D) is a unit column
+# pasted from the wholesale report (G5, Caso 1).
+WHOLESALE_UNIT_WORDS = {"saco", "quintal", "ciento", "caja", "bulto"}
+
+
+def retail_weeks_with_wholesale_units(
+    rows: list[tuple[int, list[object]]], date_columns: tuple[int, ...], unit_column: int
+) -> set[int]:
+    """Row numbers of retail week blocks whose unit column holds wholesale units.
+
+    In those weeks the unit column was pasted from the wholesale report (Saco, Quintal,
+    Ciento...) while the prices are retail, so every unit is wrong. The ETL recovers each
+    product's unit from the previous retail week it appeared in (G5, Caso 1).
+    """
+    flagged: set[int] = set()
+    block: list[tuple[int, bool]] = []
+    label = None
+    for row_number, row in [*rows, (None, None)]:
+        row_label = None if row is None else _date_label(row, date_columns)
+        if row_label != label:
+            if len(block) >= MIN_AVERAGE_BLOCK_ROWS and sum(flag for _, flag in block) * 2 > len(block):
+                flagged.update(number for number, _ in block)
+            block, label = [], row_label
+        if row is not None:
+            unit = fold(row[unit_column] if unit_column < len(row) else "")
+            is_wholesale = any(word in unit for word in WHOLESALE_UNIT_WORDS) or "n/d" in unit
+            block.append((row_number, is_wholesale))
+    return flagged

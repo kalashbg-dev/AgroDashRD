@@ -14,6 +14,7 @@ from agrodash.ingestion.normalize import (
     clean_name,
     name_key,
     parse_unit,
+    repair_zero_to_dash,
     same_product_name,
     word_set_key,
 )
@@ -49,6 +50,15 @@ class CatalogResolver:
         key = name_key(raw_name)
         if key in self._products:
             return self._products[key]
+        # A bulk find/replace turned '-' into '0' in some product names (G5, Caso 2).
+        # If restoring the dash matches an existing product, use that product.
+        repaired_key = name_key(repair_zero_to_dash(raw_name))
+        if repaired_key != key and repaired_key in self._products:
+            product = self._products[repaired_key]
+            self._products[key] = product
+            self._session.add(ProductAlias(raw_name=key, product=product, reviewed=False))
+            self._by_words.setdefault(word_set_key(key), product)
+            return product
         product = self._by_words.get(word_set_key(key)) or next(
             (
                 known
