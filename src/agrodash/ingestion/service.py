@@ -39,6 +39,7 @@ from agrodash.ingestion.normalize import (
 )
 from agrodash.ingestion.readers import UnreadableFile, detect_layout, is_blank, read_rows
 from agrodash.ingestion.repair import (
+    UnitLedger,
     duplicate_block_rows,
     nullify_copied_market_columns,
     repair_rows,
@@ -47,6 +48,7 @@ from agrodash.ingestion.repair import (
     retail_weeks_with_wholesale_units,
     shifted_market_cells,
     shifted_price_blocks,
+    unit_in_effect,
 )
 from agrodash.prices.models import (
     Price,
@@ -68,6 +70,9 @@ RETAIL_AVERAGES = "a week of retail averages (per lb, unit, dozen or liter) in t
 RETAIL_DATE_COLUMNS = (11, 12, 13)
 # A base unit used this many weeks is a real way of selling the product, not a typo.
 MIN_UNIT_WEEKS = 4
+# Audit M2: a conversion deviating this far from the product's usual level at that
+# market is a wrongly labelled selling unit, not a price (Zapote priced 10x overnight).
+LEVEL_FACTOR = Decimal("4")
 RETAIL_COLUMNS = 14
 RETAIL_MARKET_COLUMNS = range(4, 11)
 SUPERMARKET_NAMES = {"supermercado"}
@@ -188,6 +193,9 @@ class _Load:
         self._wholesale_unit_rows: set[int] = set()
         # Last retail unit text seen per product, used to recover units in corrupted weeks.
         self._product_units: dict[str, str] = {}
+        # Last priced amount per market and product (audit M1/M2): drift and recovery
+        # compare consecutive rows, the level band in _store uses committed history.
+        self._ledger = UnitLedger()
 
     def load(self, rows: list[list[object]]) -> None:
         if self.run.layout is SourceLayout.RETAIL:
@@ -350,7 +358,16 @@ class _Load:
         except InvalidValue as error:
             self._reject(row_number, row, RejectionReason.INVALID_DATE, str(error))
             return
-        unit = self.resolver.unit(str(unit_text or ""))
+        # Audit M1: a stable price outranks a changed label. The ledger carries the
+        # product's previous row so unreadable labels and nominal relabels keep the
+        # unit the previous row priced in; real changes with the price moving keep
+        # the row's own label.
+        name = str(name)
+        unit = unit_in_effect(
+            self.resolver.unit(str(unit_text or "")),
+            amounts,
+            self._ledger.last(price_type, name_key(name)),
+        )
         if unit is None:
             detail = f"unit {clean_name(unit_text or '')!r} has no known size"
             self._reject(row_number, row, RejectionReason.UNKNOWN_UNIT, detail)
@@ -360,7 +377,7 @@ class _Load:
                 _Observation(
                     row_number=row_number,
                     row=row,
-                    raw_name=str(name),
+                    raw_name=name,
                     category=normalize_category(rubro),
                     unit=unit,
                     market_name=market,
@@ -369,6 +386,9 @@ class _Load:
                     observed_on=observed_on,
                     amount=amount,
                 )
+            )
+            self._ledger.record(
+                price_type, name_key(name), market, amount, unit.base_unit, unit
             )
 
     def _store(self) -> None:
@@ -397,6 +417,7 @@ class _Load:
         product_ids = {product.id for _, product, _ in resolved}
         series_units = self._series_base_units(resolved, product_ids)
         stored = self._stored_keys(product_ids)
+        levels = self._level_context(product_ids, resolved)
         seen = set()
         prices = []
         for observation, product, market in resolved:
@@ -421,6 +442,25 @@ class _Load:
                 detail = f"{observation.amount} is too small to store"
                 self._reject_observation(observation, RejectionReason.INVALID_PRICE, detail)
                 continue
+            # Audit M2: a case the product's usual level decides against is a wrongly
+            # labelled unit. Committed prices carry the reference (this run's values
+            # fill in products selling here for the first time); the row never
+            # includes itself, in-band spikes pass, and a lone price is no evidence.
+            usual = self._usual_level(
+                levels[0],
+                levels[1],
+                (product.id, market.id, observation.price_type, unit.base_unit),
+                converted,
+            )
+            if usual is not None and (
+                converted > usual * LEVEL_FACTOR or converted < usual / LEVEL_FACTOR
+            ):
+                detail = (
+                    f"{unit.label} converts to {converted} per {unit.base_unit}, but "
+                    f"{product.name} usually prices at {usual} at {market.name}"
+                )
+                self._reject_observation(observation, RejectionReason.UNIT_MISMATCH, detail)
+                continue
             seen.add(key)
             self.accepted += 1
             if key in stored:
@@ -444,6 +484,54 @@ class _Load:
         self.run.prices_loaded = len(prices)
         # A retail row can have several rejected cells; count each row once.
         self.run.rows_rejected = len({rejection["row_number"] for rejection in self.rejections})
+
+    def _level_context(self, product_ids: set[int], resolved) -> tuple[dict, dict]:
+        """Level evidence for audit M2, split so one odd row cannot move the reference.
+
+        The committed average per (product, market, price type, base unit) stands for
+        the product's usual level anywhere it has sold before; this run's converted
+        values only fill in products with no committed level yet. Rejected rows never
+        land in either, and the row under check is excluded from its own reference,
+        so an outlier does not pull the level the legal rows face.
+        """
+        committed = {}
+        rows = self.session.execute(
+            select(
+                Price.product_id,
+                Price.market_id,
+                Price.price_type,
+                Unit.base_unit,
+                func.avg(Price.price_per_base_unit),
+            )
+            .join(Unit, Price.unit_id == Unit.id)
+            .where(Price.source == PriceSource.OFFICIAL, Price.product_id.in_(product_ids))
+            .group_by(Price.product_id, Price.market_id, Price.price_type, Unit.base_unit)
+        )
+        for product_id, market_id, price_type, base_unit, average in rows:
+            committed[(product_id, market_id, price_type, base_unit)] = Decimal(str(average))
+        incoming: dict[tuple, list[Decimal]] = {}
+        for observation, product, market in resolved:
+            value = per_base_unit(observation.amount, observation.unit.factor)
+            if value is None or value <= 0:
+                continue
+            key = (product.id, market.id, observation.price_type, observation.unit.base_unit)
+            incoming.setdefault(key, []).append(value)
+        return committed, incoming
+
+    @staticmethod
+    def _usual_level(committed, incoming, key, own: Decimal) -> Decimal | None:
+        """The price level a row's conversion faces, or None without other evidence."""
+        committed_level = committed.get(key)
+        if committed_level is not None:
+            return committed_level
+        others = sorted(incoming.get(key, ()))
+        try:
+            others.remove(own)
+        except ValueError:
+            pass
+        if not others:
+            return None
+        return others[len(others) // 2]
 
     def _series_base_units(self, resolved, product_ids: set[int]) -> dict[tuple, set[BaseUnit]]:
         """Base units each (product, price type) may be priced in.

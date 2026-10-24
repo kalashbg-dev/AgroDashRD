@@ -563,3 +563,67 @@ def shifted_market_cells(
                 column for column in voided if column < len(row)
             )
     return cells
+
+
+DRIFT_TOLERANCE = Decimal("0.08")
+
+
+@dataclass(frozen=True)
+class UnitSighting:
+    """One priced cell as the ledger remembers it: amount, base unit, and Unit used."""
+
+    amount: Decimal
+    base_unit: object
+    unit: object
+
+
+class UnitLedger:
+    """Per (price type, product) memory of each market's last priced row.
+
+    The service feeds it in file order, so a row's reference is the product's previous
+    row. That is what unit labels drift against: the audit's M1 asks to trust a stable
+    price over a changed label. Only the last sighting per market is kept — recovery
+    and drift compare consecutive rows, not whole history.
+    """
+
+    def __init__(self) -> None:
+        self._markets: dict[tuple[object, str], dict[str, UnitSighting]] = {}
+
+    def record(self, price_type, name_key: str, market: str, amount, base_unit, unit) -> None:
+        seen = self._markets.setdefault((price_type, name_key), {})
+        seen[market] = UnitSighting(amount, base_unit, unit)
+
+    def last(self, price_type, name_key: str) -> dict[str, UnitSighting]:
+        return self._markets.get((price_type, name_key), {})
+
+
+def unit_in_effect(parsed, amounts, previous: dict[str, UnitSighting]):
+    """What a priced row scales in, given its label and the product's previous row.
+
+    parsed is the row's own label (or None when no size is stated), amounts the row's
+    (market, amount) pairs, previous the same markets' UnitSighting from the ledger.
+
+    A label the parser cannot read is trusted when the money stays put: within the
+    drift tolerance of the previous row the previous unit applies — "Saco/1N/DN/D lb"
+    is the same sack the row above priced (audit M1: "ignorar cambios de etiqueta que
+    no mueven el precio"). A readable label of another size is only a nominal relabel
+    under the same rule (Lechuga moves its box from 18 to 20 lb at the same box price);
+    when the price moves the new label is real and prices in it. The amount is never
+    rescaled — no convertir por tamaño a ciegas. Several markets decide together by
+    the middle ratio: every cell of a row carries the same label change, while a stray
+    cell cannot.
+    """
+    candidates = [
+        (market, amount, previous[market])
+        for market, amount in amounts
+        if market in previous
+        and previous[market].unit is not None
+        and (parsed is None or previous[market].base_unit == parsed.base_unit)
+    ]
+    if not candidates:
+        return parsed
+    candidates.sort(key=lambda pair: abs(pair[1] / pair[2].amount - 1))
+    middle = candidates[len(candidates) // 2]
+    if abs(middle[1] / middle[2].amount - 1) > DRIFT_TOLERANCE:
+        return parsed
+    return middle[2].unit
