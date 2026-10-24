@@ -28,6 +28,12 @@ RETAIL_UNITS = {"lb", "lib", "libra", "libras", "unidad", "und", "ud", "doc", "d
 MIN_AVERAGE_BLOCK_ROWS = 5
 # Market cells the copy must share with its source before the column counts as pasted.
 MIN_COPIED_CELLS = 10
+# Same-name priced rows must repeat the neighboring week's row ABOVE this often, and
+# that week's own row this rarely, before the price column reads as slid (G1).
+MIN_SLID_RATE = 0.40
+MAX_ALIGNED_RATE = 0.25
+# The wholesale report's price column.
+WHOLESALE_PRICE_COLUMN = 4
 
 
 @dataclass(frozen=True)
@@ -312,6 +318,54 @@ def repeated_week_rows(
     return repeated
 
 
+def _blocks_with_numbers(
+    rows: list[tuple[int, list[object]]], date_columns: tuple[int, ...]
+) -> list[tuple[tuple, list[tuple[int, list[object]]]]]:
+    """Consecutive rows grouped by their date label, as [(label, [(row_number, row)...])].
+
+    Runs of the same label stay whole even when one stray row is sandwiched between
+    them (a paste artifact corrupting a single date cell); the stray joins the
+    surrounding period instead of breaking it. The stray keeps its original label,
+    so a corrupt date still fails its own date repair after quarantine.
+    """
+    raw: list[tuple[tuple, list[tuple[int, list[object]]]]] = []
+    rows_of_run: list[tuple[int, list[object]]] = []
+    prev_label = None
+    for row_number, row in rows:
+        if len(row) <= max(date_columns):
+            rows_of_run.append((row_number, row))
+            continue
+        label = _date_label(row, date_columns)
+        if prev_label is not None and label != prev_label:
+            raw.append((prev_label, rows_of_run))
+            rows_of_run = []
+        rows_of_run.append((row_number, row))
+        prev_label = label
+    if rows_of_run:
+        raw.append((prev_label, rows_of_run))
+
+    # A lone stray row whose label got corrupted while the rows around it share one
+    # label joins that label's period instead of splitting it in two.
+    blocks: list[tuple[tuple, list[tuple[int, list[object]]]]] = []
+    index = 0
+    while index < len(raw):
+        label, group = raw[index]
+        following = raw[index + 1] if index + 1 < len(raw) else None
+        if (
+            blocks
+            and len(group) <= 1
+            and following is not None
+            and blocks[-1][0] == following[0]
+        ):
+            blocks[-1][1].extend(group)
+            blocks[-1][1].extend(following[1])
+            index += 2
+            continue
+        blocks.append((label, list(group)))
+        index += 1
+    return blocks
+
+
 def _comparable(cell: object) -> Decimal | None:
     """The cell's price as a comparable value, or None when it holds no price."""
     try:
@@ -360,21 +414,7 @@ def nullify_copied_market_columns(
     across weeks is a frozen price or a G3 copy, never a pasted column.
     """
     # Split into week blocks by date label, keeping each row's number.
-    blocks: list[tuple[tuple, list[tuple[int, list[object]]]]] = []
-    current: list[tuple[int, list[object]]] = []
-    prev_label = None
-    for row_number, row in rows:
-        if len(row) <= max(date_columns):
-            current.append((row_number, row))
-            continue
-        label = _date_label(row, date_columns)
-        if prev_label is not None and label != prev_label:
-            blocks.append((prev_label, current))
-            current = []
-        current.append((row_number, row))
-        prev_label = label
-    if current:
-        blocks.append((prev_label, current))
+    blocks = _blocks_with_numbers(rows, date_columns)
 
     voided: set[int] = set()
     previous_nullified: set[int] = set()
@@ -417,3 +457,109 @@ def previous_answers(column: int, blocks, index: int) -> list[Decimal | None]:
     """Comparable values of a market column in the block one week earlier."""
     block = blocks[index - 1][1]
     return _column_answers(block, column)
+
+
+def _name_positions(block: list[tuple[int, list[object]]]) -> dict[str, int]:
+    positions: dict[str, int] = {}
+    for position, (_, row) in enumerate(block):
+        positions.setdefault(str(row[0]).strip().lower(), position)
+    return positions
+
+
+def _column_slid_down(
+    block: list[tuple[int, list[object]]],
+    neighbor: list[tuple[int, list[object]]],
+    column: int,
+) -> bool:
+    """Whether a block's price column carries the neighboring week's row-above prices."""
+    positions = _name_positions(neighbor)
+    pairs = shifted = aligned = 0
+    for _, row in block:
+        price = _comparable(row[column])
+        if price is None:
+            continue
+        position = positions.get(str(row[0]).strip().lower())
+        if position is None:
+            continue
+        pairs += 1
+        if (
+            position >= 1
+            and _comparable(neighbor[position - 1][1][column]) == price
+        ):
+            shifted += 1
+        if _comparable(neighbor[position][1][column]) == price:
+            aligned += 1
+    return (
+        pairs >= MIN_COPIED_CELLS
+        and shifted / pairs >= MIN_SLID_RATE
+        and aligned / pairs <= MAX_ALIGNED_RATE
+    )
+
+
+def shifted_price_blocks(rows, date_columns) -> set[int]:
+    """Row numbers of wholesale weeks whose price column slid down one row (G1).
+
+    A week fires when the prices of its same-named products repeat a neighboring
+    week's row ABOVE far more often than that week's own row: every product is
+    carrying the price of the one below (Papa at 8.000, Yautía at 48 in the audit).
+    The whole week goes to quarantine; realigning the column is out of scope.
+    """
+    blocks = _blocks_with_numbers(rows, date_columns)
+    row_numbers: list[int] = []
+    for index, (_, block) in enumerate(blocks):
+        if len(block) < MIN_AVERAGE_BLOCK_ROWS:
+            continue
+        neighbors = []
+        if index:
+            neighbors.append(blocks[index - 1][1])
+        if index + 1 < len(blocks):
+            neighbors.append(blocks[index + 1][1])
+        if any(
+            _column_slid_down(block, neighbor, WHOLESALE_PRICE_COLUMN)
+            for neighbor in neighbors
+        ):
+            row_numbers.extend(row_number for row_number, _ in block)
+    return set(row_numbers)
+
+
+# The audit's one retail case: Los Mina's Ago-2017 S2 column slid with no dominant
+# row-level signature (shifted 14% at one row, 30% at the same row, 35% the other
+# way), so no threshold singles it out; the user chose to void that column for that
+# week instead of leaving an absurd column.
+AUDIT_SLID_MARKET_COLUMNS = ((("segunda", "agosto", "2017"), 6),)
+
+
+def shifted_market_cells(
+    rows, date_columns, market_columns
+) -> dict[int, set[int]]:
+    """Per row number, the retail market columns that slid a row for that week (G1).
+
+    Same detection as `shifted_price_blocks`, one market column at a time, plus the
+    audit's explicit Los Mina case. The fired cells should be voided (missing), and
+    the rest of the row loads normally.
+    """
+    blocks = _blocks_with_numbers(rows, date_columns)
+    fired: set[tuple[tuple, int]] = set(AUDIT_SLID_MARKET_COLUMNS)
+    for index, (label, block) in enumerate(blocks):
+        if len(block) < MIN_AVERAGE_BLOCK_ROWS:
+            continue
+        neighbors = []
+        if index:
+            neighbors.append(blocks[index - 1][1])
+        if index + 1 < len(blocks):
+            neighbors.append(blocks[index + 1][1])
+        for column in market_columns:
+            if any(
+                _column_slid_down(block, neighbor, column) for neighbor in neighbors
+            ):
+                fired.add((label, column))
+    cells: dict[int, set[int]] = {}
+    for label, block in blocks:
+        voided = {column for fired_label, column in fired if fired_label == label}
+        if not voided:
+            continue
+        for row_number, row in block:
+            cells.setdefault(row_number, set()).update(
+                column for column in voided if column < len(row)
+            )
+    return cells

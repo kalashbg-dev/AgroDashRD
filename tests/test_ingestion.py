@@ -504,3 +504,41 @@ def test_a_market_column_pasted_from_another_market_is_voided_for_that_week(sess
     assert {(price.observed_on, price.amount) for price in supermarket} == {
         (date(2024, 1, 8), Decimal("30.00"))
     }
+
+
+def test_a_wholesale_week_whose_price_column_slid_down_is_quarantined(session):
+    rows = [
+        f"Producto {i};Cereales;Mayorista;Quintal;{100 + i - 1};Cuarta;Junio;2025\r\n"
+        for i in range(1, 13)
+    ] + [
+        f"Producto {i};Cereales;Mayorista;Quintal;{None if i == 1 else 100 + i - 2};Quinta;Junio;2025\r\n"
+        for i in range(1, 13)
+    ]
+    content = "".join(rows).encode("latin-1")
+
+    run = load(session, "mayorista.csv", content)
+
+    assert (run.prices_loaded, run.rows_rejected) == (12, 12)
+    assert reasons(run) == {RejectionReason.UNEXPECTED_LAYOUT: 12}
+    shifted = [row for row in run.quarantined_rows if "shifted" in row.detail]
+    assert len(shifted) == 12
+    assert shifted[0].row_number == 13
+    loaded = session.query(Price).join(Product).filter(Product.name == "Producto 3").all()
+    assert [(price.observed_on, price.amount) for price in loaded] == [(date(2025, 6, 22), Decimal("102.00"))]
+
+
+def test_the_los_mina_column_marked_by_the_audit_does_not_load(session):
+    rows = [
+        f"Arroz {i};Cereal;Minorista;lb;{20 + i - 1};{30 + i - 1};{40 + i - 1};N/D;N/D;N/D;N/D;Segunda;Agosto;2017\r\n"
+        for i in range(1, 13)
+    ]
+    content = RETAIL_HEADER + "".join(rows)
+
+    run = load(session, "minorista.csv", content.encode("latin-1"))
+
+    assert (run.rows_read, run.prices_loaded, run.rows_rejected) == (12, 24, 0)
+    assert run.values_missing == 60
+    los_mina = session.query(Price).join(Market).filter(Market.name == "Mercado Los Mina").all()
+    assert los_mina == []
+    nuevo = session.query(Price).join(Market).filter(Market.name == "Mercado Nuevo").all()
+    assert len(nuevo) == 12
