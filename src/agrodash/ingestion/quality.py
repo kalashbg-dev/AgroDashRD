@@ -17,6 +17,9 @@ from agrodash.prices.models import Price, PriceSource, PriceStatus, PriceType
 MIN_WEEKS = 104
 MIN_COVERAGE = 0.75
 MAX_STALENESS = timedelta(weeks=8)
+# A converted price that never moves marks a series as likely regulated or stale
+# (audit M5: the frozen tramos). It is reported, never excluded from forecasting.
+MIN_FROZEN_WEEKS = 52
 # A product whose prices stop while a similar name in its category starts within three
 # weeks was most likely renamed in the reports ("Cilantro/ grande/ primera" became
 # "Cilantro, primera" in February 2018). Only a person can confirm it.
@@ -41,6 +44,9 @@ class SeriesCoverage:
     ready: bool
     # Why it is not ready: "inactive", "short", "sparse", "stale"; empty when ready.
     not_ready: tuple[str, ...] = ()
+    # Longest consecutive run of one identical converted price; 0 when it never
+    # reached MIN_FROZEN_WEEKS. Being frozen does not demote a ready series.
+    frozen_weeks: int = 0
 
 
 @dataclass(frozen=True)
@@ -200,6 +206,51 @@ def _similarity(left: str, right: str) -> float:
     return len(left_words & right_words) / len(left_words | right_words)
 
 
+def _frozen_runs(session: Session) -> dict[tuple[int, int, str, str], int]:
+    """Longest consecutive run of one identical converted price per series.
+
+    A series is the same grouping series_coverage reports (product, market, price
+    type, base unit); two prices belong to the run when their dates follow each
+    other within a weekly step (<=14 days apart) and they hold the same value.
+    """
+
+    rows = session.execute(
+        select(
+            Price.product_id,
+            Price.market_id,
+            Price.price_type,
+            Unit.base_unit,
+            Price.observed_on,
+            Price.price_per_base_unit,
+        )
+        .join(Unit, Price.unit_id == Unit.id)
+        .where(Price.source == PriceSource.OFFICIAL)
+        .order_by(
+            Price.product_id, Price.market_id, Price.price_type, Unit.base_unit, Price.observed_on
+        )
+    )
+    runs: dict[tuple[int, int, str, str], int] = {}
+    key = None
+    previous_value = None
+    previous_on = None
+    current = 0
+    for product_id, market_id, price_type, base_unit, observed_on, value in rows:
+        series = (product_id, market_id, str(price_type), str(base_unit))
+        continues = (
+            series == key
+            and value == previous_value
+            and previous_on is not None
+            and timedelta(0) <= observed_on - previous_on <= timedelta(days=14)
+        )
+        current = current + 1 if continues else 1
+        key = series
+        previous_value = value
+        previous_on = observed_on
+        if current > runs.get(series, 0):
+            runs[series] = current
+    return runs
+
+
 def series_coverage(session: Session) -> list[SeriesCoverage]:
     """Every official series (product, market, price type, base unit) and its coverage."""
     # Wholesale and retail reports may end on different dates; compare within each type.
@@ -211,6 +262,7 @@ def series_coverage(session: Session) -> list[SeriesCoverage]:
         ).all()
     )
     counted = extract("day", Price.observed_on) <= LAST_COUNTED_DAY
+    runs = _frozen_runs(session)
     rows = session.execute(
         select(
             Product.id,
@@ -284,6 +336,16 @@ def series_coverage(session: Session) -> list[SeriesCoverage]:
                 coverage=coverage,
                 ready=not reasons,
                 not_ready=reasons,
+                frozen_weeks=(
+                    run
+                    if (
+                        run := runs.get(
+                            (product_id, market_id, str(price_type), str(base_unit)), 0
+                        )
+                    )
+                    >= MIN_FROZEN_WEEKS
+                    else 0
+                ),
             )
         )
     return series
