@@ -39,6 +39,7 @@ from agrodash.ingestion.normalize import (
 )
 from agrodash.ingestion.readers import UnreadableFile, detect_layout, is_blank, read_rows
 from agrodash.ingestion.repair import (
+    duplicate_block_rows,
     repair_rows,
     retail_average_rows,
     retail_weeks_with_wholesale_units,
@@ -215,10 +216,17 @@ class _Load:
             self._wholesale_unit_rows = retail_weeks_with_wholesale_units(
                 repaired.rows, date_columns, 3
             )
+        duplicates = duplicate_block_rows(repaired.rows, date_columns)
         for row_number, row in repaired.rows:
             self.run.rows_read += 1
             if row_number in averages:
                 self._reject(row_number, row, RejectionReason.UNEXPECTED_LAYOUT, RETAIL_AVERAGES)
+                continue
+            if row_number in duplicates:
+                self._reject(
+                    row_number, row, RejectionReason.UNEXPECTED_LAYOUT,
+                    "duplicate block (identical to an earlier period)"
+                )
                 continue
             parse_row(row_number, row)
 
