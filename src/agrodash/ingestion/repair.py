@@ -255,3 +255,54 @@ def duplicate_block_rows(
         else:
             seen.add(fingerprint)
     return duplicates
+
+
+def repeated_week_rows(
+    rows: list[tuple[int, list[object]]], date_columns: tuple[int, ...]
+) -> set[int]:
+    """Row numbers of weeks that are near-copies of the previous week (G3).
+
+    A week whose prices are ~99% identical to the previous week's is a copy
+    pasted by the analyst. Flagged as "repeated price" for exclusion from
+    forecasting and volatility.
+    """
+    # Group rows into blocks by date label.
+    blocks: list[tuple[tuple, list[tuple[int, list[object]]]]] = []
+    current: list[tuple[int, list[object]]] = []
+    prev_label = None
+    for row_number, row in rows:
+        if len(row) <= max(date_columns):
+            current.append((row_number, row))
+            continue
+        lbl = _date_label(row, date_columns)
+        if prev_label is not None and lbl != prev_label:
+            blocks.append((prev_label, current))
+            current = []
+        current.append((row_number, row))
+        prev_label = lbl
+    if current:
+        blocks.append((prev_label, current))
+
+    repeated: set[int] = set()
+    for i in range(1, len(blocks)):
+        prev_label, prev_rows = blocks[i - 1]
+        curr_label, curr_rows = blocks[i]
+        # Only compare blocks in the same month and year.
+        if prev_label[1:] != curr_label[1:]:
+            continue
+        if len(curr_rows) < MIN_AVERAGE_BLOCK_ROWS:
+            continue
+        # Build sets of row content (excluding date columns).
+        def _content(row):
+            return tuple(str(cell) for j, cell in enumerate(row) if j not in date_columns)
+
+        prev_set = {_content(row) for _, row in prev_rows if len(row) > max(date_columns)}
+        curr_list = [(_rn, _content(row)) for _rn, row in curr_rows if len(row) > max(date_columns)]
+
+        if not curr_list or not prev_set:
+            continue
+        matched = sum(1 for _, c in curr_list if c in prev_set)
+        if matched / len(curr_list) >= 0.95:
+            for row_number, _ in curr_rows:
+                repeated.add(row_number)
+    return repeated

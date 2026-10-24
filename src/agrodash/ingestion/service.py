@@ -41,6 +41,7 @@ from agrodash.ingestion.readers import UnreadableFile, detect_layout, is_blank, 
 from agrodash.ingestion.repair import (
     duplicate_block_rows,
     repair_rows,
+    repeated_week_rows,
     retail_average_rows,
     retail_weeks_with_wholesale_units,
 )
@@ -217,6 +218,7 @@ class _Load:
                 repaired.rows, date_columns, 3
             )
         duplicates = duplicate_block_rows(repaired.rows, date_columns)
+        repeated = repeated_week_rows(repaired.rows, date_columns)
         for row_number, row in repaired.rows:
             self.run.rows_read += 1
             if row_number in averages:
@@ -226,6 +228,12 @@ class _Load:
                 self._reject(
                     row_number, row, RejectionReason.UNEXPECTED_LAYOUT,
                     "duplicate block (identical to an earlier period)"
+                )
+                continue
+            if row_number in repeated:
+                self._reject(
+                    row_number, row, RejectionReason.UNEXPECTED_LAYOUT,
+                    "repeated price (identical to previous week)"
                 )
                 continue
             parse_row(row_number, row)
