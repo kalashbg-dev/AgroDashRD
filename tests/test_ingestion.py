@@ -511,7 +511,8 @@ def test_a_wholesale_week_whose_price_column_slid_down_is_quarantined(session):
         f"Producto {i};Cereales;Mayorista;Quintal;{100 + i - 1};Cuarta;Junio;2025\r\n"
         for i in range(1, 13)
     ] + [
-        f"Producto {i};Cereales;Mayorista;Quintal;{None if i == 1 else 100 + i - 2};Quinta;Junio;2025\r\n"
+        f"Producto {i};Cereales;Mayorista;Quintal;{None if i == 1 else 100 + i - 2};"
+        "Quinta;Junio;2025\r\n"
         for i in range(1, 13)
     ]
     content = "".join(rows).encode("latin-1")
@@ -524,12 +525,15 @@ def test_a_wholesale_week_whose_price_column_slid_down_is_quarantined(session):
     assert len(shifted) == 12
     assert shifted[0].row_number == 13
     loaded = session.query(Price).join(Product).filter(Product.name == "Producto 3").all()
-    assert [(price.observed_on, price.amount) for price in loaded] == [(date(2025, 6, 22), Decimal("102.00"))]
+    assert [(price.observed_on, price.amount) for price in loaded] == [
+        (date(2025, 6, 22), Decimal("102.00"))
+    ]
 
 
 def test_the_los_mina_column_marked_by_the_audit_does_not_load(session):
     rows = [
-        f"Arroz {i};Cereal;Minorista;lb;{20 + i - 1};{30 + i - 1};{40 + i - 1};N/D;N/D;N/D;N/D;Segunda;Agosto;2017\r\n"
+        f"Arroz {i};Cereal;Minorista;lb;{20 + i - 1};{30 + i - 1};{40 + i - 1};"
+        "N/D;N/D;N/D;N/D;Segunda;Agosto;2017\r\n"
         for i in range(1, 13)
     ]
     content = RETAIL_HEADER + "".join(rows)
@@ -544,13 +548,16 @@ def test_the_los_mina_column_marked_by_the_audit_does_not_load(session):
     assert len(nuevo) == 12
 
 
+LECHUGA = "Lechuga (Repollada), primera;Legumbres-Hortalizas;Mayorista"
+
+
 def test_a_nominal_relabel_whose_price_holds_keeps_the_previous_weeks_unit(session):
     # The audit's Lechuga case: the box label drifts from 18 to 20 lb but the
     # huacal price does not move; the second week must join the first week's
     # unit so no false per-pound jump is stored.
     content = wholesale(
-        "Lechuga (Repollada), primera;Legumbres-Hortalizas;Mayorista;Huacal/18 lb;1000;Primera;Junio;2024",
-        "Lechuga (Repollada), primera;Legumbres-Hortalizas;Mayorista;Huacal/20 lb;1000;Segunda;Junio;2024",
+        f"{LECHUGA};Huacal/18 lb;1000;Primera;Junio;2024",
+        f"{LECHUGA};Huacal/20 lb;1000;Segunda;Junio;2024",
     )
 
     run = load(session, "mayorista.csv", content)
@@ -565,8 +572,8 @@ def test_a_nominal_relabel_whose_price_holds_keeps_the_previous_weeks_unit(sessi
 
 def test_a_relabel_with_a_real_price_move_keeps_the_bigger_package_unit(session):
     content = wholesale(
-        "Lechuga (Repollada), primera;Legumbres-Hortalizas;Mayorista;Huacal/18 lb;1080;Primera;Junio;2024",
-        "Lechuga (Repollada), primera;Legumbres-Hortalizas;Mayorista;Huacal/20 lb;1240;Segunda;Junio;2024",
+        f"{LECHUGA};Huacal/18 lb;1080;Primera;Junio;2024",
+        f"{LECHUGA};Huacal/20 lb;1240;Segunda;Junio;2024",
     )
 
     run = load(session, "mayorista.csv", content)
@@ -670,7 +677,9 @@ def test_a_retail_cell_far_from_its_row_peers_is_quarantined_alone(session):
     assert "lb converts to" in detail
     assert "5 retail markets of that week price around 40.0000" in detail
     nuevo = session.query(Price).join(Market).filter(Market.name == "Mercado Nuevo").all()
-    consuelo = session.query(Price).join(Market).filter(Market.name == "Mercado Villa Consuelo").all()
+    consuelo = (
+        session.query(Price).join(Market).filter(Market.name == "Mercado Villa Consuelo").all()
+    )
     assert nuevo == []
     assert consuelo
 

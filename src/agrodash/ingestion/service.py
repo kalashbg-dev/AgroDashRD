@@ -40,6 +40,7 @@ from agrodash.ingestion.normalize import (
 )
 from agrodash.ingestion.readers import UnreadableFile, detect_layout, is_blank, read_rows
 from agrodash.ingestion.repair import (
+    WHOLESALE_UNIT_WORDS,
     UnitLedger,
     duplicate_block_rows,
     nullify_copied_market_columns,
@@ -235,18 +236,9 @@ class _Load:
         duplicates = duplicate_block_rows(repaired.rows, date_columns)
         repeated = repeated_week_rows(repaired.rows, date_columns)
         # Copy detection compares whole content, so it runs before any cell is voided.
-        copied = (
-            set()
-            if unit_column is not None
-            else nullify_copied_market_columns(
-                repaired.rows, date_columns, RETAIL_MARKET_COLUMNS
-            )
-        )
-        slid = (
-            set()
-            if unit_column is None
-            else shifted_price_blocks(repaired.rows, date_columns)
-        )
+        if unit_column is None:
+            nullify_copied_market_columns(repaired.rows, date_columns, RETAIL_MARKET_COLUMNS)
+        slid = set() if unit_column is None else shifted_price_blocks(repaired.rows, date_columns)
         slid_cells = (
             {}
             if unit_column is not None
@@ -266,20 +258,26 @@ class _Load:
                 continue
             if row_number in duplicates:
                 self._reject(
-                    row_number, row, RejectionReason.UNEXPECTED_LAYOUT,
-                    "duplicate block (identical to an earlier period)"
+                    row_number,
+                    row,
+                    RejectionReason.UNEXPECTED_LAYOUT,
+                    "duplicate block (identical to an earlier period)",
                 )
                 continue
             if row_number in repeated:
                 self._reject(
-                    row_number, row, RejectionReason.UNEXPECTED_LAYOUT,
-                    "repeated price (identical to previous week)"
+                    row_number,
+                    row,
+                    RejectionReason.UNEXPECTED_LAYOUT,
+                    "repeated price (identical to previous week)",
                 )
                 continue
             if row_number in slid:
                 self._reject(
-                    row_number, row, RejectionReason.UNEXPECTED_LAYOUT,
-                    "price column shifted one row"
+                    row_number,
+                    row,
+                    RejectionReason.UNEXPECTED_LAYOUT,
+                    "price column shifted one row",
                 )
                 continue
             parse_row(row_number, row)
@@ -332,7 +330,7 @@ class _Load:
         # Track the last retail unit per product for future recovery.
         if row_number not in self._wholesale_unit_rows and str(raw_unit_text or "").strip():
             folded = fold(raw_unit_text)
-            if not any(word in folded for word in ("saco", "quintal", "ciento", "caja", "bulto")) and "n/d" not in folded:
+            if "n/d" not in folded and not any(word in folded for word in WHOLESALE_UNIT_WORDS):
                 self._product_units[name_key(str(name))] = str(raw_unit_text)
 
     def _amounts(self, row_number, row, cells) -> list[tuple[str, Decimal]]:
@@ -391,9 +389,7 @@ class _Load:
                     amount=amount,
                 )
             )
-            self._ledger.record(
-                price_type, name_key(name), market, amount, unit.base_unit, unit
-            )
+            self._ledger.record(price_type, name_key(name), market, amount, unit.base_unit, unit)
 
     def _store(self) -> None:
         # New products take what most of their rows say, not whatever the first row says.
@@ -516,7 +512,7 @@ class _Load:
         the ordinary scale always owns the reference.
         """
         peers = {}
-        for observation, product, market in resolved:
+        for observation, _product, market in resolved:
             if market.kind == MarketKind.SUPERMARKET:
                 continue
             value = per_base_unit(observation.amount, observation.unit.factor)

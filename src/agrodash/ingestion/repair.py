@@ -160,7 +160,8 @@ def retail_weeks_with_wholesale_units(
     for row_number, row in [*rows, (None, None)]:
         row_label = None if row is None else _date_label(row, date_columns)
         if row_label != label:
-            if len(block) >= MIN_AVERAGE_BLOCK_ROWS and sum(flag for _, flag in block) * 2 > len(block):
+            wholesale = sum(flag for _, flag in block)
+            if len(block) >= MIN_AVERAGE_BLOCK_ROWS and wholesale * 2 > len(block):
                 flagged.update(number for number, _ in block)
             block, label = [], row_label
         if row is not None:
@@ -191,10 +192,12 @@ def duplicate_block_rows(
     for label, block in _blocks_with_numbers(rows, date_columns):
         if len(block) < MIN_AVERAGE_BLOCK_ROWS:
             continue
-        fingerprint = tuple(sorted(
-            tuple(str(cell) for i, cell in enumerate(row) if i not in date_columns)
-            for _, row in block
-        ))
+        fingerprint = tuple(
+            sorted(
+                tuple(str(cell) for i, cell in enumerate(row) if i not in date_columns)
+                for _, row in block
+            )
+        )
         if label == previous:
             fingerprints.add(fingerprint)
             continue
@@ -242,6 +245,7 @@ def repeated_week_rows(
             continue
         if len(curr_rows) < MIN_AVERAGE_BLOCK_ROWS:
             continue
+
         # Build sets of row content (excluding date columns).
         def _content(row):
             return tuple(str(cell) for j, cell in enumerate(row) if j not in date_columns)
@@ -291,12 +295,7 @@ def _blocks_with_numbers(
     while index < len(raw):
         label, group = raw[index]
         following = raw[index + 1] if index + 1 < len(raw) else None
-        if (
-            blocks
-            and len(group) <= 1
-            and following is not None
-            and blocks[-1][0] == following[0]
-        ):
+        if blocks and len(group) <= 1 and following is not None and blocks[-1][0] == following[0]:
             blocks[-1][1].extend(group)
             blocks[-1][1].extend(following[1])
             index += 2
@@ -314,9 +313,7 @@ def _comparable(cell: object) -> Decimal | None:
         return None
 
 
-def _column_answers(
-    block_rows: list[tuple[int, list[object]]], column: int
-) -> dict[str, Decimal]:
+def _column_answers(block_rows: list[tuple[int, list[object]]], column: int) -> dict[str, Decimal]:
     """A market column's prices by product, so weeks listing products in another
     order or with other products still compare."""
     answers = {}
@@ -381,7 +378,8 @@ def nullify_copied_market_columns(
             if left in nullified or index == 0:
                 continue
             if any(
-                left != right and right not in previous_nullified
+                left != right
+                and right not in previous_nullified
                 and _is_copy(answers[left], previous_answers(right, blocks, index))
                 for right in market_columns
             ):
@@ -424,10 +422,7 @@ def _column_slid_down(
         if position is None:
             continue
         pairs += 1
-        if (
-            position >= 1
-            and _comparable(neighbor[position - 1][1][column]) == price
-        ):
+        if position >= 1 and _comparable(neighbor[position - 1][1][column]) == price:
             shifted += 1
         if _comparable(neighbor[position][1][column]) == price:
             aligned += 1
@@ -457,8 +452,7 @@ def shifted_price_blocks(rows, date_columns) -> set[int]:
         if index + 1 < len(blocks):
             neighbors.append(blocks[index + 1][1])
         if any(
-            _column_slid_down(block, neighbor, WHOLESALE_PRICE_COLUMN)
-            for neighbor in neighbors
+            _column_slid_down(block, neighbor, WHOLESALE_PRICE_COLUMN) for neighbor in neighbors
         ):
             row_numbers.extend(row_number for row_number, _ in block)
     return set(row_numbers)
@@ -471,9 +465,7 @@ def shifted_price_blocks(rows, date_columns) -> set[int]:
 AUDIT_SLID_MARKET_COLUMNS = ((("segunda", "agosto", "2017"), 6),)
 
 
-def shifted_market_cells(
-    rows, date_columns, market_columns
-) -> dict[int, set[int]]:
+def shifted_market_cells(rows, date_columns, market_columns) -> dict[int, set[int]]:
     """Per row number, the retail market columns that slid a row for that week (G1).
 
     Same detection as `shifted_price_blocks`, one market column at a time, plus the
@@ -491,9 +483,7 @@ def shifted_market_cells(
         if index + 1 < len(blocks):
             neighbors.append(blocks[index + 1][1])
         for column in market_columns:
-            if any(
-                _column_slid_down(block, neighbor, column) for neighbor in neighbors
-            ):
+            if any(_column_slid_down(block, neighbor, column) for neighbor in neighbors):
                 fired.add((label, column))
     cells: dict[int, set[int]] = {}
     for label, block in blocks:
