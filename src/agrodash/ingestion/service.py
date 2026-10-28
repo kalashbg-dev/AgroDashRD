@@ -38,7 +38,7 @@ from agrodash.ingestion.normalize import (
     parse_week_date,
 )
 from agrodash.ingestion.readers import UnreadableFile, detect_layout, is_blank, read_rows
-from agrodash.ingestion.repair import repair_rows
+from agrodash.ingestion.repair import repair_rows, retail_average_rows
 from agrodash.prices.models import (
     Price,
     PriceSource,
@@ -49,10 +49,13 @@ from agrodash.prices.models import (
 )
 
 MAX_FILE_BYTES = 50 * 1024 * 1024
-# The wholesale report has no market column; it is collected at Mercado Nuevo.
-WHOLESALE_MARKET = "Mercado Nuevo"
+# The wholesale report has no market column: its one price stands for Mercadom and Mercado
+# Nuevo, the two markets that trade wholesale. Mercado Nuevo keeps its own retail prices.
+WHOLESALE_MARKET = "Referencia mayorista (Mercadom y Mercado Nuevo)"
 WHOLESALE_COLUMNS = 8
 WHOLESALE_DATE_COLUMNS = (5, 6, 7)
+WHOLESALE_UNIT_COLUMN = 3
+RETAIL_AVERAGES = "a week of retail averages (per lb, unit, dozen or liter) in the wholesale report"
 RETAIL_DATE_COLUMNS = (11, 12, 13)
 # A base unit used this many weeks is a real way of selling the product, not a typo.
 MIN_UNIT_WEEKS = 4
@@ -182,19 +185,29 @@ class _Load:
                 rows[1:], 2, RETAIL_DATE_COLUMNS, lambda n, row: self._retail_row(n, row, markets)
             )
         else:
-            self._read_rows(rows, 1, WHOLESALE_DATE_COLUMNS, self._wholesale_row)
+            self._read_rows(
+                rows, 1, WHOLESALE_DATE_COLUMNS, self._wholesale_row, WHOLESALE_UNIT_COLUMN
+            )
         self._store()
         if self.rejections and not self.accepted:
             # Most likely not a price report, or one in a layout we misread. Failing keeps
             # the file loadable again instead of marking it done with nothing stored.
             raise IngestionError("No row could be loaded; check that the file is a price report")
 
-    def _read_rows(self, rows, first_line, date_columns, parse_row) -> None:
+    def _read_rows(self, rows, first_line, date_columns, parse_row, unit_column=None) -> None:
         repaired = repair_rows(rows, first_line, date_columns)
         self.originals = repaired.originals
         self.run.rows_corrected = repaired.dates_corrected
+        averages = (
+            set()
+            if unit_column is None
+            else retail_average_rows(repaired.rows, date_columns, unit_column)
+        )
         for row_number, row in repaired.rows:
             self.run.rows_read += 1
+            if row_number in averages:
+                self._reject(row_number, row, RejectionReason.UNEXPECTED_LAYOUT, RETAIL_AVERAGES)
+                continue
             parse_row(row_number, row)
 
     def _wholesale_row(self, row_number: int, row: list[object]) -> None:

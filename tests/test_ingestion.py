@@ -55,7 +55,8 @@ def test_wholesale_csv_loads_prices_and_quarantines_bad_rows(session):
         Decimal("2350.00"),
         Decimal("18.8000"),
     )
-    assert first_week.market.name == "Mercado Nuevo"
+    assert first_week.market.name == "Referencia mayorista (Mercadom y Mercado Nuevo)"
+    assert first_week.market.kind is MarketKind.WHOLESALE
     assert (first_week.price_type, first_week.source, first_week.status) == (
         PriceType.WHOLESALE,
         PriceSource.OFFICIAL,
@@ -337,6 +338,59 @@ def test_a_lasting_change_of_unit_starts_a_new_series_and_stray_units_are_reject
     bases = Counter(price.unit.base_unit for price in session.query(Price))
     assert bases == {BaseUnit.POUND: 4, BaseUnit.UNIT: 4}
     assert reasons(run) == {RejectionReason.UNIT_MISMATCH: 1}
+
+
+def test_a_week_of_retail_averages_in_the_wholesale_report_is_quarantined_whole(session):
+    # Quinta Julio 2025 of the real report: the six retail markets' averages, per lb.
+    content = wholesale(
+        "Arroz (Selecto), primera;Cereales;Mayorista;Saco/125 lb;4100;Cuarta;Julio;2025",
+        "Batata (Tifey), primera;Raices-Tuberculos;Mayorista;Quintal;2200;Cuarta;Julio;2025",
+        "Arroz (Selecto), primera;Cereales;Mayorista;lb;36;Quinta;Julio;2025",
+        "Batata;Raices-Tuberculos;Mayorista;lb;27.833333;Quinta;Julio;2025",
+        "Plátano (Barahona), grande;Musaceas;Mayorista;Unidad;24;Quinta;Julio;2025",
+        "Limón (Persa);Frutas;Mayorista;Doc;70.166667;Quinta;Julio;2025",
+        "Leche (Líquida);Lateo;Mayorista;Litro;80.833333;Quinta;Julio;2025",
+        "Arroz (Selecto), primera;Cereales;Mayorista;Saco/125 lb;4100;Primera;Agosto;2025",
+    )
+
+    run = load(session, "mayorista.csv", content)
+
+    assert reasons(run) == {RejectionReason.UNEXPECTED_LAYOUT: 5}
+    kept = sorted(row.row_number for row in run.quarantined_rows)
+    assert kept == [3, 4, 5, 6, 7]
+    assert all("retail averages" in row.detail for row in run.quarantined_rows)
+    assert json.loads(run.quarantined_rows[0].raw_values)[3] == "lb"
+    names = Counter(price.product.name for price in session.query(Price))
+    assert names == {"Arroz (Selecto), primera": 2, "Batata (Tifey), primera": 1}
+    assert session.query(Product).filter_by(name="Batata").count() == 0
+
+
+def test_a_wholesale_week_with_a_few_products_sold_by_the_unit_still_loads(session):
+    content = wholesale(
+        "Repollo (Emblem), primera;Legumbres-Hortalizas;Mayorista;Unidad;45;Primera;Marzo;2024",
+        "Papa (Granola), primera;Raices-Tuberculos;Mayorista;Kilo;60;Primera;Marzo;2024",
+        "Arroz (Selecto), primera;Cereales;Mayorista;Saco/125 lb;4100;Primera;Marzo;2024",
+        "Batata (Tifey), primera;Raices-Tuberculos;Mayorista;Quintal;2200;Primera;Marzo;2024",
+    )
+
+    run = load(session, "mayorista.csv", content)
+
+    assert run.rows_rejected == 0
+    assert session.query(Price).count() == 4
+
+
+def test_mercado_nuevo_keeps_only_retail_prices_after_both_reports_load(session):
+    load(session, "mayorista.csv")
+    load(session, "minorista.csv")
+
+    kinds = {market.name: market.kind for market in session.query(Market)}
+    assert kinds["Mercado Nuevo"] is MarketKind.RETAIL
+    assert kinds["Referencia mayorista (Mercadom y Mercado Nuevo)"] is MarketKind.WHOLESALE
+    by_market = Counter((price.market.name, price.price_type) for price in session.query(Price))
+    assert {name for name, price_type in by_market if price_type is PriceType.WHOLESALE} == {
+        "Referencia mayorista (Mercadom y Mercado Nuevo)"
+    }
+    assert by_market[("Mercado Nuevo", PriceType.RETAIL)] > 0
 
 
 def test_names_where_the_source_wrote_a_semicolon_for_enye_are_repaired(session):

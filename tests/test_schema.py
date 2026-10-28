@@ -2,6 +2,7 @@ from datetime import date
 from decimal import Decimal
 
 import pytest
+import sqlalchemy as sa
 from alembic import command
 from alembic.autogenerate import compare_metadata
 from alembic.config import Config
@@ -292,6 +293,96 @@ def test_dropping_market_location_works_on_a_database_with_prices(tmp_path):
     assert "location" not in columns
     with engine.connect() as connection:
         assert connection.execute(text("SELECT count(*) FROM prices")).scalar() == 1
+    engine.dispose()
+
+
+WHOLESALE_REFERENCE = "Referencia mayorista (Mercadom y Mercado Nuevo)"
+
+
+def seeded_before_wholesale_reference(tmp_path):
+    url = f"sqlite:///{tmp_path / 'markets.db'}"
+    command.upgrade(alembic_config(url), "eb10aa80820f")
+    engine = create_db_engine(url)
+    statements = [
+        "INSERT INTO markets (id, name, kind, is_active) VALUES"
+        " (1, 'Mercado Nuevo', 'wholesale', 1), (2, 'Mercadom', 'retail', 1)",
+        "INSERT INTO products (id, name, category, base_unit, is_active)"
+        " VALUES (1, 'Papa', 'Raices', 'lb', 1)",
+        "INSERT INTO units (id, code, label, base_unit, factor)"
+        " VALUES (1, '1-lb', '1 lb', 'lb', 1)",
+        "INSERT INTO prices (id, product_id, market_id, unit_id, observed_on, price_type, source,"
+        " status, amount, price_per_base_unit, is_outlier) VALUES"
+        " (1, 1, 1, 1, '2026-09-01', 'wholesale', 'official', 'validated', 10, 10, 0),"
+        " (2, 1, 1, 1, '2026-09-01', 'retail', 'official', 'validated', 15, 15, 0),"
+        " (3, 1, 1, 1, '2026-09-02', 'wholesale', 'field_report', 'pending', 11, 11, 0),"
+        " (4, 1, 2, 1, '2026-09-01', 'retail', 'official', 'validated', 16, 16, 0)",
+        "INSERT INTO forecast_runs (id, status, model_version, horizon, series_count)"
+        " VALUES (1, 'succeeded', 'v1', 4, 2)",
+        "INSERT INTO forecasts (id, run_id, model, step, target_on, value, product_id, market_id,"
+        " price_type, base_unit) VALUES"
+        " (1, 1, 'naive', 1, '2026-09-08', 10, 1, 1, 'wholesale', 'lb'),"
+        " (2, 1, 'naive', 1, '2026-09-08', 15, 1, 1, 'retail', 'lb')",
+        "INSERT INTO forecast_evaluations (id, run_id, model, mase, selected, product_id,"
+        " market_id, price_type, base_unit) VALUES"
+        " (1, 1, 'naive', 1.0, 1, 1, 1, 'wholesale', 'lb'),"
+        " (2, 1, 'naive', 1.0, 1, 1, 1, 'retail', 'lb')",
+    ]
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+    return url, engine
+
+
+def market_of(connection, name: str) -> dict[tuple[int, str], str]:
+    table = sa.table(name, sa.column("id"), sa.column("price_type"), sa.column("market_id"))
+    markets = sa.table("markets", sa.column("id"), sa.column("name"))
+    rows = connection.execute(
+        sa.select(table.c.id, table.c.price_type, markets.c.name)
+        .join(markets, markets.c.id == table.c.market_id)
+        .order_by(table.c.id)
+    )
+    return {(row_id, price_type): market for row_id, price_type, market in rows}
+
+
+def test_wholesale_prices_move_to_their_reference_market_and_back(tmp_path):
+    url, engine = seeded_before_wholesale_reference(tmp_path)
+
+    command.upgrade(alembic_config(url), "head")
+
+    with engine.connect() as connection:
+        markets = dict(connection.execute(text("SELECT name, kind FROM markets")).all())
+        assert markets == {
+            "Mercado Nuevo": "retail",
+            "Mercadom": "retail",
+            WHOLESALE_REFERENCE: "wholesale",
+        }
+        assert market_of(connection, "prices") == {
+            (1, "wholesale"): WHOLESALE_REFERENCE,
+            (2, "retail"): "Mercado Nuevo",
+            (3, "wholesale"): WHOLESALE_REFERENCE,
+            (4, "retail"): "Mercadom",
+        }
+        for table in ("forecasts", "forecast_evaluations"):
+            assert market_of(connection, table) == {
+                (1, "wholesale"): WHOLESALE_REFERENCE,
+                (2, "retail"): "Mercado Nuevo",
+            }
+        amounts = connection.execute(text("SELECT id, amount FROM prices ORDER BY id")).all()
+        assert [(row_id, float(amount)) for row_id, amount in amounts] == [
+            (1, 10.0),
+            (2, 15.0),
+            (3, 11.0),
+            (4, 16.0),
+        ]
+
+    command.downgrade(alembic_config(url), "eb10aa80820f")
+
+    with engine.connect() as connection:
+        markets = dict(connection.execute(text("SELECT name, kind FROM markets")).all())
+        assert markets == {"Mercado Nuevo": "wholesale", "Mercadom": "retail"}
+        assert set(market_of(connection, "prices").values()) == {"Mercado Nuevo", "Mercadom"}
+        for table in ("forecasts", "forecast_evaluations"):
+            assert set(market_of(connection, table).values()) == {"Mercado Nuevo"}
     engine.dispose()
 
 
