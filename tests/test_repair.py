@@ -1,8 +1,15 @@
+from decimal import Decimal
+
+from agrodash.catalog.models import BaseUnit
+from agrodash.ingestion.normalize import ParsedUnit
 from agrodash.ingestion.repair import (
+    UnitLedger,
+    UnitSighting,
     nullify_copied_market_columns,
     repair_rows,
     shifted_market_cells,
     shifted_price_blocks,
+    unit_in_effect,
 )
 
 DATE_COLUMNS = (5, 6, 7)
@@ -229,3 +236,101 @@ def test_the_los_mina_column_marked_by_the_audit_is_voided_without_signal():
     voided = shifted_market_cells(number(rows), RETAIL_DATE_COLUMNS, RETAIL_MARKET_COLUMNS)
 
     assert voided == {row_number: {6} for row_number in range(2, 14)}
+
+
+def test_a_nominal_relabel_whose_price_holds_keeps_the_previous_weeks_unit():
+    market = "Referencia mayorista (Mercadom y Mercado Nuevo)"
+    previous_unit = object()
+    previous = {market: UnitSighting(Decimal(1000), BaseUnit.POUND, previous_unit)}
+    relabelled = ParsedUnit(BaseUnit.POUND, Decimal(20))
+
+    unit = unit_in_effect(relabelled, [(market, Decimal(1000))], previous)
+
+    assert unit is previous_unit
+
+
+def test_a_relabel_with_a_price_move_is_a_real_bigger_package():
+    market = "Referencia mayorista (Mercadom y Mercado Nuevo)"
+    previous = {market: UnitSighting(Decimal(1080), BaseUnit.POUND, object())}
+    bigger = ParsedUnit(BaseUnit.POUND, Decimal(20))
+
+    unit = unit_in_effect(bigger, [(market, Decimal(1240))], previous)
+
+    assert unit is bigger
+
+
+def test_a_relabel_in_another_base_unit_never_borrows_the_previous_unit():
+    market = "Referencia mayorista (Mercadom y Mercado Nuevo)"
+    previous = {market: UnitSighting(Decimal(100), BaseUnit.POUND, object())}
+    per_unit = ParsedUnit(BaseUnit.UNIT, Decimal(1))
+
+    unit = unit_in_effect(per_unit, [(market, Decimal(100))], previous)
+
+    assert unit is per_unit
+
+
+def test_an_unreadable_label_whose_price_holds_recovers_the_previous_unit():
+    market = "Referencia mayorista (Mercadom y Mercado Nuevo)"
+    previous_unit = ParsedUnit(BaseUnit.POUND, Decimal(100))
+    previous = {market: UnitSighting(Decimal(2000), BaseUnit.POUND, previous_unit)}
+
+    unit = unit_in_effect(None, [(market, Decimal(2000))], previous)
+
+    assert unit is previous_unit
+
+
+def test_an_unreadable_label_with_a_price_move_stays_unknown():
+    market = "Referencia mayorista (Mercadom y Mercado Nuevo)"
+    previous = {market: UnitSighting(Decimal(2000), BaseUnit.POUND, object())}
+
+    unit = unit_in_effect(None, [(market, Decimal(2600))], previous)
+
+    assert unit is None
+
+
+def test_an_unreadable_label_without_a_previous_week_stays_unknown():
+    unit = unit_in_effect(None, [("Referencia mayorista (Mercadom y Mercado Nuevo)", Decimal(2000))], {})
+
+    assert unit is None
+
+
+def test_a_retail_row_recovered_through_the_median_of_its_markets():
+    shared = ParsedUnit(BaseUnit.POUND, Decimal(1))
+    previous = {
+        "Mercado Nuevo": UnitSighting(Decimal(100), BaseUnit.POUND, shared),
+        "Villa Consuelo": UnitSighting(Decimal(90), BaseUnit.POUND, shared),
+        "Cristo Rey": UnitSighting(Decimal(95), BaseUnit.POUND, shared),
+    }
+    amounts = [
+        ("Mercado Nuevo", Decimal(108)),
+        ("Villa Consuelo", Decimal(92)),
+        ("Cristo Rey", Decimal(95)),
+    ]
+
+    unit = unit_in_effect(None, amounts, previous)
+
+    # Ratios 1.08, 1.02 and 1.00: the median 1.02 holds within the tolerance.
+    assert unit is shared
+
+
+def test_a_retail_row_with_one_unknown_market_cell_still_recovers():
+    shared = ParsedUnit(BaseUnit.POUND, Decimal(1))
+    previous = {
+        "Mercado Nuevo": UnitSighting(Decimal(100), BaseUnit.POUND, shared),
+        "Villa Consuelo": UnitSighting(Decimal(90), BaseUnit.POUND, shared),
+    }
+
+    unit = unit_in_effect(None, [("Villa Consuelo", Decimal(91))], previous)
+
+    assert unit is shared
+
+
+def test_the_ledger_keeps_the_last_sighting_per_market_and_price_type():
+    ledger = UnitLedger()
+    ledger.record("mayorista", "ajo", "Referencia mayorista", Decimal(100), object(), BaseUnit.POUND)
+    ledger.record("mayorista", "ajo", "Referencia mayorista", Decimal(120), object(), BaseUnit.POUND)
+    ledger.record("minorista", "ajo", "Mercado Nuevo", Decimal(30), object(), BaseUnit.POUND)
+
+    assert ledger.last("mayorista", "ajo")["Referencia mayorista"].amount == Decimal(120)
+    assert ledger.last("minorista", "ajo")["Mercado Nuevo"].amount == Decimal(30)
+    assert ledger.last("mayorista", "papa") == {}

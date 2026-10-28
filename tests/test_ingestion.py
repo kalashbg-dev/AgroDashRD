@@ -542,3 +542,99 @@ def test_the_los_mina_column_marked_by_the_audit_does_not_load(session):
     assert los_mina == []
     nuevo = session.query(Price).join(Market).filter(Market.name == "Mercado Nuevo").all()
     assert len(nuevo) == 12
+
+
+def test_a_nominal_relabel_whose_price_holds_keeps_the_previous_weeks_unit(session):
+    # The audit's Lechuga case: the box label drifts from 18 to 20 lb but the
+    # huacal price does not move; the second week must join the first week's
+    # unit so no false per-pound jump is stored.
+    content = wholesale(
+        "Lechuga (Repollada), primera;Legumbres-Hortalizas;Mayorista;Huacal/18 lb;1000;Primera;Junio;2024",
+        "Lechuga (Repollada), primera;Legumbres-Hortalizas;Mayorista;Huacal/20 lb;1000;Segunda;Junio;2024",
+    )
+
+    run = load(session, "mayorista.csv", content)
+
+    one, two = session.query(Price).order_by(Price.observed_on).all()
+    assert (run.prices_loaded, run.rows_rejected) == (2, 0)
+    assert two.unit_id == one.unit_id
+    assert (one.amount, two.amount) == (Decimal("1000.00"), Decimal("1000.00"))
+    assert one.price_per_base_unit == two.price_per_base_unit
+    assert two.price_per_base_unit != Decimal("50.0000")  # 1000/20 would be the false jump
+
+
+def test_a_relabel_with_a_real_price_move_keeps_the_bigger_package_unit(session):
+    content = wholesale(
+        "Lechuga (Repollada), primera;Legumbres-Hortalizas;Mayorista;Huacal/18 lb;1080;Primera;Junio;2024",
+        "Lechuga (Repollada), primera;Legumbres-Hortalizas;Mayorista;Huacal/20 lb;1240;Segunda;Junio;2024",
+    )
+
+    run = load(session, "mayorista.csv", content)
+
+    one, two = session.query(Price).order_by(Price.observed_on).all()
+    assert (run.prices_loaded, run.rows_rejected) == (2, 0)
+    assert two.unit_id != one.unit_id
+    assert one.price_per_base_unit == Decimal("60.0000")
+    assert two.price_per_base_unit == Decimal("62.0000")
+
+
+def test_an_unreadable_label_whose_price_holds_loads_the_previous_weeks_unit(session):
+    content = wholesale(
+        "Zapote;Frutas;Mayorista;Saco/100 lb;2000;Primera;Junio;2024",
+        "Zapote;Frutas;Mayorista;Saco/1N/DN/D lb;2000;Segunda;Junio;2024",
+    )
+
+    run = load(session, "mayorista.csv", content)
+
+    one, two = session.query(Price).order_by(Price.observed_on).all()
+    assert (run.prices_loaded, run.rows_rejected) == (2, 0)
+    assert reasons(run) == {}
+    assert two.unit_id == one.unit_id
+    assert two.price_per_base_unit == one.price_per_base_unit == Decimal("20.0000")
+
+
+def test_an_unreadable_label_whose_price_moved_stays_quarantined(session):
+    content = wholesale(
+        "Zapote;Frutas;Mayorista;Saco/100 lb;2000;Primera;Junio;2024",
+        "Zapote;Frutas;Mayorista;Saco/1N/DN/D lb;2600;Segunda;Junio;2024",
+    )
+
+    run = load(session, "mayorista.csv", content)
+
+    assert session.query(Price).count() == 1
+    assert reasons(run) == {RejectionReason.UNKNOWN_UNIT: 1}
+
+
+def test_a_price_far_outside_the_products_level_is_quarantined_as_wrong_unit(session):
+    # Zapote's audit case: the mislabelled unit carries a price from another scale.
+    # The stable-price recovery does not apply (the price moved), so the converted
+    # price faces the product's usual level and loses.
+    content = wholesale(
+        *[
+            f"Zapote;Frutas;Mayorista;Saco/100 lb;2000;{week};Junio;2024"
+            for week in ("Primera", "Segunda", "Tercera", "Cuarta")
+        ],
+        "Zapote;Frutas;Mayorista;Saco/10 lb;20000;Primera;Julio;2024",
+    )
+
+    run = load(session, "mayorista.csv", content)
+
+    assert session.query(Price).count() == 4
+    assert reasons(run) == {RejectionReason.UNIT_MISMATCH: 1}
+    detail = run.quarantined_rows[-1].detail
+    assert "usually prices at" in detail
+
+
+def test_a_whole_legitimate_price_spike_inside_the_level_band_stores(session):
+    content = wholesale(
+        *[
+            f"Zapote;Frutas;Mayorista;Saco/100 lb;2000;{week};Junio;2024"
+            for week in ("Primera", "Segunda", "Tercera", "Cuarta")
+        ],
+        "Zapote;Frutas;Mayorista;Saco/100 lb;7000;Primera;Julio;2024",
+    )
+
+    run = load(session, "mayorista.csv", content)
+
+    assert (run.prices_loaded, run.rows_rejected) == (5, 0)
+    assert reasons(run) == {}
