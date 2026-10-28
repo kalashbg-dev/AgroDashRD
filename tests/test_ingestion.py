@@ -640,6 +640,20 @@ def test_a_whole_legitimate_price_spike_inside_the_level_band_stores(session):
     assert reasons(run) == {}
 
 
+def test_a_lasting_level_change_stores_on_both_sides(session):
+    # Ají Gustoso's case: the series moves to another scale and stays there; every
+    # row agrees with the weeks on one side of it, so nothing is a wrong unit.
+    weeks = ("Primera", "Segunda", "Tercera", "Cuarta")
+    content = wholesale(
+        *[f"Zapote;Frutas;Mayorista;Saco/100 lb;2000;{week};Junio;2024" for week in weeks],
+        *[f"Zapote;Frutas;Mayorista;Saco/100 lb;20000;{week};Julio;2024" for week in weeks],
+    )
+
+    run = load(session, "mayorista.csv", content)
+
+    assert (run.prices_loaded, run.rows_rejected) == (8, 0)
+
+
 def test_a_retail_cell_far_from_its_row_peers_is_quarantined_alone(session):
     # Mercado Nuevo loses a digit relative to the other five markets of the row;
     # only that cell is quarantined and the row's other markets keep storing.
