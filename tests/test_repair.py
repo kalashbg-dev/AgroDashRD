@@ -115,6 +115,25 @@ def test_a_market_column_equal_to_another_market_a_week_earlier_is_voided():
     assert [cells[9] for cells in rows[:12]] == [100] * 12
 
 
+def test_a_copy_from_the_previous_week_is_found_by_product_with_a_few_cells_edited():
+    # Villa Consuelo dic-2024 S5: the week lists products in another order, adds one,
+    # and the pasted column had cells edited afterwards (75 of 79 still agree).
+    first = [
+        retail_row(f"Arroz {i}", "Cuarta", [None] * 5 + [100 + i, None]) for i in range(20)
+    ]
+    second = [
+        retail_row(f"Arroz {i}", "Quinta", [None] * 4 + [999 if i == 3 else 100 + i, None, None])
+        for i in reversed(range(20))
+    ] + [retail_row("Arroz nuevo", "Quinta", [None] * 4 + [50, None, None])]
+
+    voided = nullify_copied_market_columns(
+        number(first + second), RETAIL_DATE_COLUMNS, RETAIL_MARKET_COLUMNS
+    )
+
+    assert voided == set(range(22, 43))
+    assert [cells[9] for cells in first] == [100 + i for i in range(20)]
+
+
 def test_a_market_column_that_differs_from_the_others_is_not_voided():
     rows = [retail_row(f"Arroz {i}", "Primera", [20, 21, 22, 23, 24, 25, 26]) for i in range(1, 13)]
 

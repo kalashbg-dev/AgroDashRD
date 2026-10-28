@@ -28,6 +28,8 @@ RETAIL_UNITS = {"lb", "lib", "libra", "libras", "unidad", "und", "ud", "doc", "d
 MIN_AVERAGE_BLOCK_ROWS = 5
 # Market cells the copy must share with its source before the column counts as pasted.
 MIN_COPIED_CELLS = 10
+# Share of those shared cells that must agree.
+COPY_AGREEMENT = Decimal("0.9")
 # Same-name priced rows must repeat the neighboring week's row ABOVE this often, and
 # that week's own row this rarely, before the price column reads as slid (G1).
 MIN_SLID_RATE = 0.40
@@ -314,27 +316,29 @@ def _comparable(cell: object) -> Decimal | None:
 
 def _column_answers(
     block_rows: list[tuple[int, list[object]]], column: int
-) -> list[Decimal | None]:
-    return [
-        _comparable(row[column]) if column < len(row) else None
-        for _, row in block_rows
-    ]
+) -> dict[str, Decimal]:
+    """A market column's prices by product, so weeks listing products in another
+    order or with other products still compare."""
+    answers = {}
+    for _, row in block_rows:
+        value = _comparable(row[column]) if column < len(row) else None
+        if value is not None:
+            answers[name_key(str(row[0] or ""))] = value
+    return answers
 
 
-def _is_copy(left: list[Decimal | None], right: list[Decimal | None]) -> bool:
-    """Whether a market column is a copy of another across the block's rows.
+def _is_copy(left: dict[str, Decimal], right: dict[str, Decimal]) -> bool:
+    """Whether a market column is a copy of another across the block's products.
 
-    Every cell where both columns hold a price must agree, and there must be enough
-    such cells: two markets never answer the same price on a whole week (G6).
+    Two markets never answer the same price on almost a whole week (G6); the copy
+    may have a few cells edited afterwards (Villa Consuelo dic-2024 S5 keeps 75 of
+    the 79 prices it took from the previous Cristo Rey).
     """
-    pairs = 0
-    for left_cell, right_cell in zip(left, right):
-        if left_cell is None or right_cell is None:
-            continue
-        pairs += 1
-        if left_cell != right_cell:
-            return False
-    return pairs >= MIN_COPIED_CELLS
+    common = [product for product in left if product in right]
+    if len(common) < MIN_COPIED_CELLS:
+        return False
+    agreeing = sum(left[product] == right[product] for product in common)
+    return agreeing >= COPY_AGREEMENT * len(common)
 
 
 def nullify_copied_market_columns(
@@ -391,7 +395,7 @@ def nullify_copied_market_columns(
     return voided
 
 
-def previous_answers(column: int, blocks, index: int) -> list[Decimal | None]:
+def previous_answers(column: int, blocks, index: int) -> dict[str, Decimal]:
     """Comparable values of a market column in the block one week earlier."""
     block = blocks[index - 1][1]
     return _column_answers(block, column)
