@@ -178,7 +178,7 @@ def _ingest_one(session: Session, file_name: str, content: bytes, trigger) -> bo
 
 SHOWN_NAMES = 20
 # Internal ids forecasting needs; the export keeps the columns it always had.
-EXPORT_HIDDEN_FIELDS = ("product_id", "market_id", "not_ready")
+EXPORT_HIDDEN_FIELDS = ("product_id", "market_id", "not_ready", "frozen_weeks")
 
 
 def _quality_report(args: argparse.Namespace) -> int:
@@ -221,6 +221,21 @@ def _quality_report(args: argparse.Namespace) -> int:
         print(f"  {entry.week} {entry.price_type}: {len(entry.missing)} missing ({shown}{more})")
     if len(report.partial_weeks) > SHOWN_NAMES:
         print(f"  ... and {len(report.partial_weeks) - SHOWN_NAMES} more weeks")
+    frozen = sorted(
+        (entry for entry in report.series if entry.frozen_weeks >= quality.MIN_FROZEN_WEEKS),
+        key=lambda entry: (-entry.frozen_weeks, entry.product, entry.market, entry.price_type),
+    )
+    print(
+        "Frozen series (a converted price unchanged "
+        f"for {quality.MIN_FROZEN_WEEKS}+ consecutive weeks):"
+    )
+    for entry in frozen[:SHOWN_NAMES]:
+        print(
+            f"  {entry.product} at {entry.market} {entry.price_type} per {entry.base_unit}: "
+            f"{entry.frozen_weeks} frozen weeks"
+        )
+    if len(frozen) > SHOWN_NAMES:
+        print(f"  ... and {len(frozen) - SHOWN_NAMES} more series")
     if args.series_csv:
         try:
             with args.series_csv.open("w", newline="", encoding="utf-8") as file:

@@ -1,9 +1,10 @@
 import csv
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from sqlalchemy.orm import Session
 
 from agrodash import cli
 from agrodash.catalog.models import BaseUnit, Market, MarketKind, Product, ProductAlias, Unit
@@ -278,3 +279,62 @@ def test_the_quality_report_command_lists_partial_weeks(cli_database, capsys):
     out = capsys.readouterr().out
 
     assert "Partial weeks (a product priced before and after is missing that week):" in out
+
+
+def add_weekly(session, name, amounts, start=date(2020, 1, 1)):
+    """One retail series: one price per week, in order, amount = converted price."""
+    product = Product(name=name, category="Frutas", base_unit=BaseUnit.POUND)
+    market = session.query(Market).first() or Market(name="Mercado Nuevo", kind=MarketKind.RETAIL)
+    unit = session.query(Unit).first() or Unit(
+        code="1-lb", label="1 lb", base_unit=BaseUnit.POUND, factor=Decimal(1)
+    )
+    for index, amount in enumerate(amounts):
+        session.add(
+            Price(
+                product=product,
+                market=market,
+                unit=unit,
+                observed_on=start + timedelta(weeks=index),
+                price_type=PriceType.RETAIL,
+                source=PriceSource.OFFICIAL,
+                status=PriceStatus.VALIDATED,
+                amount=Decimal(amount),
+                price_per_base_unit=Decimal(amount),
+            )
+        )
+    session.commit()
+    return product
+
+
+def test_a_frozen_series_is_marked_and_stays_ready(session, monkeypatch):
+    # The user decision: mark the frozen tranche, keep it live for forecasting.
+    monkeypatch.setattr(quality, "MIN_WEEKS", 8)
+    add_weekly(session, "Habichuela", ["60"] * 60)
+
+    series = build_report(session).series[0]
+
+    assert series.weeks == 60
+    assert series.frozen_weeks == 60
+    assert series.ready is True
+    assert "frozen" not in series.not_ready
+
+
+def test_a_series_that_moves_or_breaks_is_never_frozen(session):
+    add_weekly(session, "Moves", ["10", "12"] * 32)
+    # Two staying stretches (40 + 24) under the threshold: never marked.
+    add_weekly(session, "Breaks", ["10"] * 40 + ["12"] + ["10"] * 24)
+
+    frozen = {series.product: series.frozen_weeks for series in build_report(session).series}
+
+    assert frozen == {"Moves": 0, "Breaks": 0}
+
+
+def test_the_quality_report_command_lists_frozen_series(cli_database, capsys):
+    with Session(cli_database) as session:
+        add_weekly(session, "Habichuela", ["60"] * 60)
+
+    cli.main(["quality-report"])
+    out = capsys.readouterr().out
+
+    assert "Frozen series (a converted price unchanged for 52+ consecutive weeks):" in out
+    assert "  Habichuela at Mercado Nuevo retail per lb: 60 frozen weeks" in out
