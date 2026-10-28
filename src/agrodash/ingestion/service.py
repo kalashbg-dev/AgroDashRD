@@ -40,6 +40,7 @@ from agrodash.ingestion.normalize import (
 from agrodash.ingestion.readers import UnreadableFile, detect_layout, is_blank, read_rows
 from agrodash.ingestion.repair import (
     duplicate_block_rows,
+    nullify_copied_market_columns,
     repair_rows,
     repeated_week_rows,
     retail_average_rows,
@@ -219,6 +220,14 @@ class _Load:
             )
         duplicates = duplicate_block_rows(repaired.rows, date_columns)
         repeated = repeated_week_rows(repaired.rows, date_columns)
+        # Copy detection compares whole content, so it runs before any cell is voided.
+        copied = (
+            set()
+            if unit_column is not None
+            else nullify_copied_market_columns(
+                repaired.rows, date_columns, RETAIL_MARKET_COLUMNS
+            )
+        )
         for row_number, row in repaired.rows:
             self.run.rows_read += 1
             if row_number in averages:

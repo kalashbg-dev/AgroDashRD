@@ -473,3 +473,34 @@ def test_an_empty_name_cell_in_a_workbook_is_rejected(session):
 
     assert reasons(run) == {RejectionReason.UNEXPECTED_LAYOUT: 1}
     assert [product.name for product in session.query(Product)] == ["Papa"]
+
+
+def test_a_market_column_pasted_from_another_market_is_voided_for_that_week(session):
+    rows = [
+        f"Arroz {i};Cereal;Minorista;lb;N/D;N/D;N/D;N/D;N/D;100;100;Primera;Enero;2024\r\n"
+        for i in range(1, 13)
+    ] + [
+        f"Arroz {i};Cereal;Minorista;lb;40;N/D;N/D;N/D;N/D;N/D;30;Segunda;Enero;2024\r\n"
+        for i in range(1, 13)
+    ]
+    content = RETAIL_HEADER + "".join(rows)
+
+    run = load(session, "minorista.csv", content.encode("latin-1"))
+
+    assert (run.rows_read, run.prices_loaded, run.rows_rejected, run.values_missing) == (
+        24,
+        36,
+        0,
+        132,
+    )
+    mercadom = sorted(
+        price.amount
+        for price in session.query(Price)
+        .join(Market)
+        .filter(Market.name == "Mercadom", Price.observed_on == date(2024, 1, 1))
+    )
+    assert mercadom == [Decimal("100.00")] * 12
+    supermarket = session.query(Price).join(Market).filter(Market.name == "Supermercado").all()
+    assert {(price.observed_on, price.amount) for price in supermarket} == {
+        (date(2024, 1, 8), Decimal("30.00"))
+    }

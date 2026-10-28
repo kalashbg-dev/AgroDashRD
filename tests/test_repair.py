@@ -1,4 +1,4 @@
-from agrodash.ingestion.repair import repair_rows
+from agrodash.ingestion.repair import nullify_copied_market_columns, repair_rows
 
 DATE_COLUMNS = (5, 6, 7)
 
@@ -58,3 +58,85 @@ def test_enye_exported_as_semicolon_is_restored_and_blank_rows_are_skipped():
         (10, "Aguacate, pequeño"),
         (12, "Papa"),
     ]
+
+
+RETAIL_DATE_COLUMNS = (11, 12, 13)
+RETAIL_MARKET_COLUMNS = range(4, 11)
+
+
+def retail_row(name, week, markets, month="Enero", year="2024"):
+    return [name, "Cereales", "Minorista", "lb", *markets, week, month, year]
+
+
+def number(rows):
+    return list(enumerate(rows, start=2))
+
+
+def test_a_market_column_equal_to_another_market_in_the_same_week_is_voided():
+    rows = [retail_row(f"Arroz {i}", "Primera", [20, 21, 22, 23, 24, 100, 100]) for i in range(1, 13)]
+
+    voided = nullify_copied_market_columns(
+        number(rows), RETAIL_DATE_COLUMNS, RETAIL_MARKET_COLUMNS
+    )
+
+    assert voided == set(range(2, 14))
+    assert [cells[10] for cells in rows] == [None] * 12
+    assert [cells[9] for cells in rows] == [100] * 12
+
+
+def test_a_market_column_equal_to_another_market_a_week_earlier_is_voided():
+    rows = [
+        retail_row(f"Arroz {i}", "Primera", [None] * 5 + [100, None]) for i in range(1, 13)
+    ] + [
+        retail_row(f"Arroz {i}", "Segunda", [None, None, None, None, 100, None, None])
+        for i in range(1, 13)
+    ]
+
+    voided = nullify_copied_market_columns(
+        number(rows), RETAIL_DATE_COLUMNS, RETAIL_MARKET_COLUMNS
+    )
+
+    assert voided == set(range(14, 26))
+    assert [cells[8] for cells in rows[12:]] == [None] * 12
+    assert [cells[9] for cells in rows[:12]] == [100] * 12
+
+
+def test_a_market_column_that_differs_from_the_others_is_not_voided():
+    rows = [retail_row(f"Arroz {i}", "Primera", [20, 21, 22, 23, 24, 25, 26]) for i in range(1, 13)]
+
+    voided = nullify_copied_market_columns(
+        number(rows), RETAIL_DATE_COLUMNS, RETAIL_MARKET_COLUMNS
+    )
+
+    assert voided == set()
+    assert [cells[4] for cells in rows] == [20] * 12
+
+
+def test_a_market_column_with_too_little_overlap_is_not_voided():
+    rows = [
+        retail_row(f"Arroz {i}", "Primera", [None] * 5 + [100, None]) for i in range(1, 10)
+    ] + [
+        retail_row(f"Arroz {i}", "Segunda", [None, None, None, None, 100, None, None])
+        for i in range(1, 10)
+    ]
+
+    voided = nullify_copied_market_columns(
+        number(rows), RETAIL_DATE_COLUMNS, RETAIL_MARKET_COLUMNS
+    )
+
+    assert voided == set()
+    assert [cells[8] for cells in rows[9:]] == [100] * 9
+
+def test_a_column_repeating_itself_across_weeks_is_not_voided():
+    rows = [
+        retail_row(f"Arroz {i}", week, [None] * 5 + [100, None])
+        for week in ("Primera", "Segunda")
+        for i in range(1, 13)
+    ]
+
+    voided = nullify_copied_market_columns(
+        number(rows), RETAIL_DATE_COLUMNS, RETAIL_MARKET_COLUMNS
+    )
+
+    assert voided == set()
+    assert [cells[9] for cells in rows] == [100] * 24

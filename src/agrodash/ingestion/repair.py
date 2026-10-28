@@ -6,12 +6,14 @@ database or a file.
 
 from collections import Counter
 from dataclasses import dataclass
+from decimal import Decimal
 
 from agrodash.ingestion.normalize import (
     InvalidValue,
     clean_name,
     fold,
     name_key,
+    parse_amount,
     parse_week_date,
     repair_name,
     WEEK_PREFIXES,
@@ -24,6 +26,8 @@ ADJACENT_REPEAT_ROWS = 3
 RETAIL_UNITS = {"lb", "lib", "libra", "libras", "unidad", "und", "ud", "doc", "docena", "litro"}
 # Fewer rows than this are a stray row or two, not a pasted week.
 MIN_AVERAGE_BLOCK_ROWS = 5
+# Market cells the copy must share with its source before the column counts as pasted.
+MIN_COPIED_CELLS = 10
 
 
 @dataclass(frozen=True)
@@ -306,3 +310,110 @@ def repeated_week_rows(
             for row_number, _ in curr_rows:
                 repeated.add(row_number)
     return repeated
+
+
+def _comparable(cell: object) -> Decimal | None:
+    """The cell's price as a comparable value, or None when it holds no price."""
+    try:
+        return parse_amount(cell)
+    except InvalidValue:
+        return None
+
+
+def _column_answers(
+    block_rows: list[tuple[int, list[object]]], column: int
+) -> list[Decimal | None]:
+    return [
+        _comparable(row[column]) if column < len(row) else None
+        for _, row in block_rows
+    ]
+
+
+def _is_copy(left: list[Decimal | None], right: list[Decimal | None]) -> bool:
+    """Whether a market column is a copy of another across the block's rows.
+
+    Every cell where both columns hold a price must agree, and there must be enough
+    such cells: two markets never answer the same price on a whole week (G6).
+    """
+    pairs = 0
+    for left_cell, right_cell in zip(left, right):
+        if left_cell is None or right_cell is None:
+            continue
+        pairs += 1
+        if left_cell != right_cell:
+            return False
+    return pairs >= MIN_COPIED_CELLS
+
+
+def nullify_copied_market_columns(
+    rows: list[tuple[int, list[object]]],
+    date_columns: tuple[int, ...],
+    market_columns: range,
+) -> set[int]:
+    """Row numbers whose market column is voided because it is a copy (G6).
+
+    A pasted column answers exactly what another market answered, in the same week
+    (Supermercado = Mercadom, sep-2024 S2) or one week earlier (Cristo Rey = the
+    previous Mercadom, dic-2024 S5; the previous Villa Consuelo, ene-2025 S1). Its
+    cells become missing for that week so the rest of the row loads normally. In a
+    same-week tie the later column is treated as the copy; a same-column repeat
+    across weeks is a frozen price or a G3 copy, never a pasted column.
+    """
+    # Split into week blocks by date label, keeping each row's number.
+    blocks: list[tuple[tuple, list[tuple[int, list[object]]]]] = []
+    current: list[tuple[int, list[object]]] = []
+    prev_label = None
+    for row_number, row in rows:
+        if len(row) <= max(date_columns):
+            current.append((row_number, row))
+            continue
+        label = _date_label(row, date_columns)
+        if prev_label is not None and label != prev_label:
+            blocks.append((prev_label, current))
+            current = []
+        current.append((row_number, row))
+        prev_label = label
+    if current:
+        blocks.append((prev_label, current))
+
+    voided: set[int] = set()
+    previous_nullified: set[int] = set()
+    for index, (_, block) in enumerate(blocks):
+        if len(block) < MIN_AVERAGE_BLOCK_ROWS:
+            previous_nullified = set()
+            continue
+        answers = {column: _column_answers(block, column) for column in market_columns}
+        nullified: set[int] = set()
+        # Same week: among identical columns only the later one is the copy.
+        for position, left in enumerate(market_columns):
+            if left in nullified:
+                continue
+            for right in market_columns[position + 1 :]:
+                if right in nullified:
+                    continue
+                if _is_copy(answers[left], answers[right]):
+                    nullified.add(right)
+        # Previous week: the copy is in the current block; a same-column repeat
+        # across weeks is not a pasted market column.
+        for left in market_columns:
+            if left in nullified or index == 0:
+                continue
+            if any(
+                left != right and right not in previous_nullified
+                and _is_copy(answers[left], previous_answers(right, blocks, index))
+                for right in market_columns
+            ):
+                nullified.add(left)
+        previous_nullified = nullified
+        for column in nullified:
+            for row_number, row in block:
+                if column < len(row) and row[column] is not None:
+                    row[column] = None
+                    voided.add(row_number)
+    return voided
+
+
+def previous_answers(column: int, blocks, index: int) -> list[Decimal | None]:
+    """Comparable values of a market column in the block one week earlier."""
+    block = blocks[index - 1][1]
+    return _column_answers(block, column)
