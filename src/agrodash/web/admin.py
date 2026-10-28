@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from agrodash.accounts.models import User
 from agrodash.accounts.service import can_manage
+from agrodash.catalog.admin import catalog_upkeep
 from agrodash.ingestion.models import IngestionTrigger
 from agrodash.ingestion.service import IngestionError, ingest_file, loaded_run
 
@@ -24,6 +25,7 @@ def load_report(
     actor = session.get(User, actor_id)
     if actor is None or not (actor.is_active and can_manage(actor.role)):
         return "error", "Tu cuenta no puede cargar datos."
+    catalog_upkeep(session)
     if loaded_run(session, content):
         return "info", f"{file_name} ya estaba cargado."
     try:

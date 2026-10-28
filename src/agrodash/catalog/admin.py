@@ -33,6 +33,7 @@ def rename_product(session: Session, actor: User, product_id: int, name: str) ->
     if taken:
         raise CatalogError(f"A product named {name!r} already exists")
     product.name = name
+    product.describe()
     session.commit()
     return product
 
@@ -82,6 +83,23 @@ def apply_approved_merges(session: Session) -> list[tuple[str, str]]:
             continue
         owners = {key: target if owner is source else owner for key, owner in owners.items()}
     return problems
+
+
+def catalog_upkeep(session: Session) -> None:
+    """Approved merges and name properties, run before any file is checked or read.
+
+    It runs even when the file was loaded already, so a database catches up on every
+    weekly job, not only when the report changed.
+    """
+    apply_approved_merges(session)
+    describe_products(session)
+
+
+def describe_products(session: Session) -> None:
+    """Bring every product's name properties in step with its name and the parser."""
+    for product in session.scalars(select(Product)):
+        product.describe()
+    session.commit()
 
 
 def _merge(session: Session, source: Product, target: Product) -> Product:

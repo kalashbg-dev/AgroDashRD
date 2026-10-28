@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from agrodash import cli
+from agrodash.catalog.models import Product
 from agrodash.ingestion import drive
 from agrodash.ingestion.drive import DriveError, download
 from agrodash.ingestion.models import IngestionRun, IngestionTrigger
@@ -49,6 +50,20 @@ def test_ingest_command_loads_files_and_reports_counts(cli_database, capsys):
     ]
     with Session(cli_database) as session:
         assert session.query(Price).count() == 5
+
+
+def test_ingesting_a_file_already_loaded_still_brings_the_catalog_up_to_date(cli_database):
+    # The weekly job often finds the same report; merges and name properties still run.
+    path = str(FIXTURES / "mayorista.csv")
+    assert cli.main(["ingest", path]) == 0
+    with Session(cli_database) as session:
+        session.query(Product).update({Product.base_name: None})
+        session.commit()
+
+    assert cli.main(["ingest", path]) == 0
+
+    with Session(cli_database) as session:
+        assert session.query(Product).filter(Product.base_name.is_(None)).count() == 0
 
 
 def test_ingest_command_reports_failures_and_keeps_going(cli_database, tmp_path, capsys):
