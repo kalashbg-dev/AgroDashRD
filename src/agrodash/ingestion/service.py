@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from hashlib import sha256
+from statistics import median
 
 from sqlalchemy import func, insert, select
 from sqlalchemy.exc import IntegrityError
@@ -74,6 +75,8 @@ MIN_UNIT_WEEKS = 4
 # Audit M2: a conversion deviating this far from the product's usual level at that
 # market is a wrongly labelled selling unit, not a price (Zapote priced 10x overnight).
 LEVEL_FACTOR = Decimal("4")
+# Prices on each side of a row that set its usual level (audit M2).
+LEVEL_NEIGHBORS = 4
 RETAIL_COLUMNS = 14
 RETAIL_MARKET_COLUMNS = range(4, 11)
 SUPERMARKET_NAMES = {"supermercado"}
@@ -195,7 +198,7 @@ class _Load:
         # Last retail unit text seen per product, used to recover units in corrupted weeks.
         self._product_units: dict[str, str] = {}
         # Last priced amount per market and product (audit M1/M2): drift and recovery
-        # compare consecutive rows, the level band in _store uses committed history.
+        # compare consecutive rows, the level band in _store uses neighboring weeks.
         self._ledger = UnitLedger()
 
     def load(self, rows: list[list[object]]) -> None:
@@ -418,11 +421,11 @@ class _Load:
         product_ids = {product.id for _, product, _ in resolved}
         series_units = self._series_base_units(resolved, product_ids)
         stored = self._stored_keys(product_ids)
-        levels = self._level_context(product_ids, resolved)
+        levels = self._level_context(resolved)
         spatial = self._peer_levels(resolved)
         seen = set()
         prices = []
-        for observation, product, market in resolved:
+        for index, (observation, product, market) in enumerate(resolved):
             unit = observation.unit
             series_bases = series_units[(product.id, observation.price_type)]
             if unit.base_unit not in series_bases:
@@ -444,19 +447,15 @@ class _Load:
                 detail = f"{observation.amount} is too small to store"
                 self._reject_observation(observation, RejectionReason.INVALID_PRICE, detail)
                 continue
-            # Audit M2: a case the product's usual level decides against is a wrongly
-            # labelled unit. Committed prices carry the reference (this run's values
-            # fill in products selling here for the first time); the row never
-            # includes itself, in-band spikes pass, and a lone price is no evidence.
-            usual = self._usual_level(
-                levels[0],
-                levels[1],
-                (product.id, market.id, observation.price_type, unit.base_unit),
-                converted,
-            )
-            if usual is not None and (
-                converted > usual * LEVEL_FACTOR or converted < usual / LEVEL_FACTOR
+            # Audit M2: a price off the level of the weeks both before and after it
+            # is a wrongly labelled unit. A real level change agrees with one side,
+            # in-band spikes pass, and a lone price is no evidence.
+            references = levels.get(index, [])
+            if references and all(
+                converted > level * LEVEL_FACTOR or converted < level / LEVEL_FACTOR
+                for level in references
             ):
+                usual = min(references, key=lambda level: abs(level - converted))
                 detail = (
                     f"{unit.label} converts to {converted} per {unit.base_unit}, but "
                     f"{product.name} usually prices at {usual} at {market.name}"
@@ -533,53 +532,34 @@ class _Load:
         peers = spatial.get((name_key(raw_name), observed_on, price_type), {})
         return [value for peer_market, value in peers.items() if peer_market != market_id]
 
-    def _level_context(self, product_ids: set[int], resolved) -> tuple[dict, dict]:
-        """Level evidence for audit M2, split so one odd row cannot move the reference.
+    @staticmethod
+    def _level_context(resolved) -> dict[int, list[Decimal]]:
+        """Usual levels for audit M2, by index in `resolved`.
 
-        The committed average per (product, market, price type, base unit) stands for
-        the product's usual level anywhere it has sold before; this run's converted
-        values only fill in products with no committed level yet. Rejected rows never
-        land in either, and the row under check is excluded from its own reference,
-        so an outlier does not pull the level the legal rows face.
+        Each row faces the median of the LEVEL_NEIGHBORS prices before it and of those
+        after it in its own (product, market, price type, base unit) series, taken from
+        this file alone so the verdict never depends on what the database held before.
         """
-        committed = {}
-        rows = self.session.execute(
-            select(
-                Price.product_id,
-                Price.market_id,
-                Price.price_type,
-                Unit.base_unit,
-                func.avg(Price.price_per_base_unit),
-            )
-            .join(Unit, Price.unit_id == Unit.id)
-            .where(Price.source == PriceSource.OFFICIAL, Price.product_id.in_(product_ids))
-            .group_by(Price.product_id, Price.market_id, Price.price_type, Unit.base_unit)
-        )
-        for product_id, market_id, price_type, base_unit, average in rows:
-            committed[(product_id, market_id, price_type, base_unit)] = Decimal(str(average))
-        incoming: dict[tuple, list[Decimal]] = {}
-        for observation, product, market in resolved:
+        series: dict[tuple, list[tuple]] = {}
+        for index, (observation, product, market) in enumerate(resolved):
             value = per_base_unit(observation.amount, observation.unit.factor)
             if value is None or value <= 0:
                 continue
             key = (product.id, market.id, observation.price_type, observation.unit.base_unit)
-            incoming.setdefault(key, []).append(value)
-        return committed, incoming
-
-    @staticmethod
-    def _usual_level(committed, incoming, key, own: Decimal) -> Decimal | None:
-        """The price level a row's conversion faces, or None without other evidence."""
-        committed_level = committed.get(key)
-        if committed_level is not None:
-            return committed_level
-        others = sorted(incoming.get(key, ()))
-        try:
-            others.remove(own)
-        except ValueError:
-            pass
-        if not others:
-            return None
-        return others[len(others) // 2]
+            series.setdefault(key, []).append(
+                (observation.observed_on, observation.row_number, index, value)
+            )
+        levels = {}
+        for points in series.values():
+            points.sort()
+            values = [value for *_, value in points]
+            for position, (*_, index, _value) in enumerate(points):
+                sides = (
+                    values[max(0, position - LEVEL_NEIGHBORS) : position],
+                    values[position + 1 : position + 1 + LEVEL_NEIGHBORS],
+                )
+                levels[index] = [median(side) for side in sides if side]
+        return levels
 
     def _series_base_units(self, resolved, product_ids: set[int]) -> dict[tuple, set[BaseUnit]]:
         """Base units each (product, price type) may be priced in.

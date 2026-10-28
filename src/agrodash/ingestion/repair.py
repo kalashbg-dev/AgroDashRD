@@ -17,7 +17,6 @@ from agrodash.ingestion.normalize import (
     parse_amount,
     parse_week_date,
     repair_name,
-    WEEK_PREFIXES,
 )
 from agrodash.ingestion.readers import is_blank
 
@@ -66,66 +65,6 @@ def repair_rows(rows, first_line: int, date_columns: tuple[int, ...]) -> Repaire
         if not is_blank(row)
     ]
     originals = {row_number: list(row) for row_number, row in numbered}
-    # Week renumbering (G4): when an entire block repeats a week number in the same
-    # month (e.g. two separate blocks both labelled "Cuarta" in octubre 2022), the
-    # second block is a mislabelled week (really "Quinta"). Renumber it to the next
-    # available week number. Only whole blocks are considered, not individual rows.
-    seen_weeks: dict[tuple, set[int]] = {}
-    week_words = {1: "Primera", 2: "Segunda", 3: "Tercera", 4: "Cuarta", 5: "Quinta"}
-    current_label = None
-    block_weeks: set[int] = set()
-    for _, row in numbered:
-        if len(row) <= max(date_columns):
-            continue
-        month = fold(row[date_columns[1]])
-        year = fold(row[date_columns[2]])
-        label = (month, year, fold(row[date_columns[0]]))
-        if label[2] != current_label and current_label is not None:
-            # Block boundary: record the weeks seen in the previous block.
-            # (handled below per block)
-            pass
-        # Track blocks by date label changes.
-    # Group into blocks by date label.
-    blocks: list[list[tuple[int, list[object]]]] = []
-    current: list[tuple[int, list[object]]] = []
-    prev_label = None
-    for row_number, row in numbered:
-        if len(row) <= max(date_columns):
-            current.append((row_number, row))
-            continue
-        lbl = _date_label(row, date_columns)
-        if prev_label is not None and lbl != prev_label:
-            blocks.append(current)
-            current = []
-        current.append((row_number, row))
-        prev_label = lbl
-    if current:
-        blocks.append(current)
-
-    for block in blocks:
-        if len(block) < MIN_AVERAGE_BLOCK_ROWS:
-            continue
-        first_row = block[0][1]
-        if len(first_row) <= max(date_columns):
-            continue
-        month = fold(first_row[date_columns[1]])
-        year = fold(first_row[date_columns[2]])
-        week_num = WEEK_PREFIXES.get(fold(first_row[date_columns[0]])[:3])
-        if week_num is None:
-            continue
-        key = (month, year)
-        seen_weeks.setdefault(key, set())
-        if week_num in seen_weeks[key]:
-            for candidate in range(week_num + 1, 6):
-                if candidate not in seen_weeks[key]:
-                    for _, row in block:
-                        if len(row) > max(date_columns):
-                            row[date_columns[0]] = week_words[candidate]
-                    seen_weeks[key].add(candidate)
-                    break
-        else:
-            seen_weeks[key].add(week_num)
-
     labels = [_date_label(row, date_columns) for _, row in numbered]
     repaired, corrected = [], 0
     block, listed, last_seen = None, Counter(), {}
@@ -232,39 +171,37 @@ def retail_weeks_with_wholesale_units(
 def duplicate_block_rows(
     rows: list[tuple[int, list[object]]], date_columns: tuple[int, ...]
 ) -> set[int]:
-    """Row numbers of blocks that are identical to an earlier block.
+    """Row numbers of week blocks that are a copy pasted under a wrong label (G4).
 
-    G4: a block whose content (products + prices, ignoring the date columns) matches
-    an earlier block in the same file is a copy pasted under a wrong period label.
-    All rows of the later block are flagged for quarantine.
+    - A block whose label already named an earlier block, with another week between
+      them, is a mislabelled copy (wholesale abril 2023 is listed twice: the second
+      Primera/Segunda are mayo's, the second Cuarta repeats Cuarta). Its true week
+      cannot be told, so the whole block goes to quarantine.
+    - A block identical to an earlier kept block under another label is a copy too
+      (retail Primera noviembre 2022 = Segunda junio 2022). Quarantined blocks are not
+      compared, so the real mayo 2023 Primera survives its mislabelled copy.
+    Blocks under MIN_AVERAGE_BLOCK_ROWS are stray rows, never a week.
     """
-    # Group rows by their date label.
-    blocks: dict[tuple, list[tuple[int, list[object]]]] = {}
-    block_order: list[tuple] = []
-    for row_number, row in rows:
-        label = _date_label(row, date_columns)
-        blocks.setdefault(label, [])
-        if label not in block_order:
-            block_order.append(label)
-        blocks[label].append((row_number, row))
-
-    seen: set[tuple] = set()
     duplicates: set[int] = set()
-    for label in block_order:
-        block_rows = blocks[label]
-        # Small blocks (stray rows) are never treated as copied weeks.
-        if len(block_rows) < MIN_AVERAGE_BLOCK_ROWS:
+    labels: set[tuple] = set()
+    fingerprints: set[tuple] = set()
+    previous = None
+    for label, block in _blocks_with_numbers(rows, date_columns):
+        if len(block) < MIN_AVERAGE_BLOCK_ROWS:
             continue
-        # Fingerprint: sorted tuple of row content excluding date columns.
         fingerprint = tuple(sorted(
             tuple(str(cell) for i, cell in enumerate(row) if i not in date_columns)
-            for _, row in block_rows
+            for _, row in block
         ))
-        if fingerprint in seen:
-            for row_number, _ in block_rows:
-                duplicates.add(row_number)
-        else:
-            seen.add(fingerprint)
+        if label == previous:
+            fingerprints.add(fingerprint)
+            continue
+        previous = label
+        if label in labels or fingerprint in fingerprints:
+            duplicates.update(row_number for row_number, _ in block)
+            continue
+        labels.add(label)
+        fingerprints.add(fingerprint)
     return duplicates
 
 
