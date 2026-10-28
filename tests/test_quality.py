@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from agrodash import cli
 from agrodash.catalog.models import BaseUnit, Market, MarketKind, Product, ProductAlias, Unit
 from agrodash.ingestion import quality
-from agrodash.ingestion.models import IngestionTrigger
+from agrodash.ingestion.models import IngestionTrigger, SourceLayout
 from agrodash.ingestion.quality import build_report
 from agrodash.ingestion.service import ingest_file
 from agrodash.prices.models import Price, PriceSource, PriceStatus, PriceType
@@ -338,3 +338,19 @@ def test_the_quality_report_command_lists_frozen_series(cli_database, capsys):
 
     assert "Frozen series (a converted price unchanged for 52+ consecutive weeks):" in out
     assert "  Habichuela at Mercado Nuevo retail per lb: 60 frozen weeks" in out
+
+
+def test_a_quarantined_wholesale_row_shows_each_cell_with_its_column_name():
+    row = quality.QuarantineRow(
+        "mayorista.csv",
+        7,
+        "unknown_unit",
+        None,
+        '["Papa", " Raices ", "Mayorista", "Sacco", 1500, "Primera", "Junio", 2018, null, "x"]',
+        SourceLayout.WHOLESALE,
+    )
+
+    assert row.original == (
+        "Producto: Papa · Rubro: Raices · Categoría: Mayorista · Unidad: Sacco · "
+        "Precio: 1500 · Semana: Primera · Mes: Junio · Año: 2018 · Columna 10: x"
+    )

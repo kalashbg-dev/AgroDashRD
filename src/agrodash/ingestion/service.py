@@ -38,7 +38,13 @@ from agrodash.ingestion.normalize import (
     parse_amount,
     parse_week_date,
 )
-from agrodash.ingestion.readers import UnreadableFile, detect_layout, is_blank, read_rows
+from agrodash.ingestion.readers import (
+    UnreadableFile,
+    detect_layout,
+    is_blank,
+    is_header,
+    read_rows,
+)
 from agrodash.ingestion.repair import (
     WHOLESALE_PRICE_COLUMN,
     WHOLESALE_UNIT_WORDS,
@@ -213,8 +219,14 @@ class _Load:
                 rows[1:], 2, RETAIL_DATE_COLUMNS, lambda n, row: self._retail_row(n, row, markets)
             )
         else:
+            # The wholesale report has no header today; a future one is skipped, not loaded.
+            first_line = 2 if is_header(rows[0]) else 1
             self._read_rows(
-                rows, 1, WHOLESALE_DATE_COLUMNS, self._wholesale_row, WHOLESALE_UNIT_COLUMN
+                rows[first_line - 1 :],
+                first_line,
+                WHOLESALE_DATE_COLUMNS,
+                self._wholesale_row,
+                WHOLESALE_UNIT_COLUMN,
             )
         self._store()
         if self.rejections and not self.accepted:
