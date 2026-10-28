@@ -273,6 +273,12 @@ def _parse_decimal_text(text: str) -> Decimal:
         raise InvalidValue(f"unreadable price {text!r}") from error
 
 
+# Labels whose stated size the prices contradict. "Lata/1Kilo" (retail Ají Gustoso and
+# Ají Cachucha, 2017-2022) sells by the pound: read as a kilo it priced retail below
+# wholesale, and the switch to "Lib" in agosto 2022 kept the same prices (log L36).
+UNIT_SIZE_FIXES = {"lata/1kilo": (BaseUnit.POUND, Decimal(1))}
+
+
 @lru_cache(maxsize=4096)
 def parse_unit(text: object) -> ParsedUnit | None:
     """Base unit and size of a selling unit label, or None when it cannot be known.
@@ -283,6 +289,8 @@ def parse_unit(text: object) -> ParsedUnit | None:
     folded = fold(text).rstrip(".")
     if folded in MISSING_TEXT or "n/d" in folded:
         return None
+    if folded in UNIT_SIZE_FIXES:
+        return _unit(*UNIT_SIZE_FIXES[folded])
     if folded in MEASURES:
         return _unit(*MEASURES[folded])
     sizes = [

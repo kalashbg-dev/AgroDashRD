@@ -89,7 +89,6 @@ def test_unreadable_or_negative_amounts_are_invalid(raw):
         ("Paq/ Lib.", BaseUnit.POUND, "1"),
         ("Quintal", BaseUnit.POUND, "100"),
         ("Kilo", BaseUnit.POUND, "2.2046"),
-        ("Lata/1Kilo", BaseUnit.POUND, "2.2046"),
         ("lb", BaseUnit.POUND, "1"),
         ("Ib", BaseUnit.POUND, "1"),
         ("Ciento", BaseUnit.UNIT, "100"),
@@ -108,6 +107,8 @@ def test_unreadable_or_negative_amounts_are_invalid(raw):
         ("Paquete", BaseUnit.UNIT, "1"),
         ("Paq", BaseUnit.UNIT, "1"),
         ("Jarro/Lata", BaseUnit.UNIT, "1"),
+        # The ajíes' "Lata/1Kilo" sells by the pound (log L36); a plain "Kilo" stays a kilo.
+        ("Lata/1Kilo", BaseUnit.POUND, "1"),
         ("Cubeta/5 gal", BaseUnit.LITER, "18.9271"),
         ("Cubeta/5 gl", BaseUnit.LITER, "18.9271"),
         ("Litro", BaseUnit.LITER, "1"),
