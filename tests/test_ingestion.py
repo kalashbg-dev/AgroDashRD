@@ -293,6 +293,21 @@ def test_a_wholesale_report_with_a_header_row_skips_it(session):
     assert (run.prices_loaded, run.rows_rejected, run.rows_read) == (1, 0, 1)
 
 
+def test_an_approved_old_name_loads_under_its_canonical_product_even_when_seen_first(session):
+    # Audit G7: "Arroz Superior" is the same product as "Arroz (Superior)/ primera".
+    content = wholesale(
+        "Arroz Superior;Cereales;Mayorista;Quintal;2000;Primera;Febrero;2018",
+        "Arroz (Superior)/ primera;Cereales;Mayorista;Quintal;2100;Segunda;Febrero;2018",
+    )
+
+    run = load(session, "mayorista.csv", content)
+
+    assert run.prices_loaded == 2
+    assert [product.name for product in session.query(Product).all()] == [
+        "Arroz (Superior)/ primera"
+    ]
+
+
 def test_an_isolated_date_typo_takes_the_date_of_its_agreeing_neighbors(session):
     content = wholesale(
         "Papa;Raices-Tuberculos;Mayorista;Quintal;1500;Primera;Junio;2018",

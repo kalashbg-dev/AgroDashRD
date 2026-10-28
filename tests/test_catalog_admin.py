@@ -6,13 +6,16 @@ import pytest
 from agrodash.accounts.models import Role, User
 from agrodash.catalog.admin import (
     CatalogError,
+    apply_approved_merges,
     confirm_alias,
     merge_products,
     rename_product,
     set_market_active,
     set_product_active,
 )
+from agrodash.catalog.approved_merges import APPROVED_MERGES
 from agrodash.catalog.models import BaseUnit, Market, MarketKind, Product, ProductAlias, Unit
+from agrodash.ingestion.normalize import name_key
 from agrodash.prices.models import Price, PriceSource, PriceStatus, PriceType
 
 
@@ -134,3 +137,45 @@ def test_a_product_cannot_be_merged_into_a_retired_one(session, catalog):
         merge_products(session, catalog["admin"], catalog["old"].id, catalog["new"].id)
 
     assert session.query(Price).filter_by(product_id=catalog["old"].id).count() == 1
+
+
+def test_an_approved_pair_already_joined_under_the_old_name_takes_the_canonical_name(session):
+    joined = Product(name="Arroz Superior", category="Cereales", base_unit=BaseUnit.UNIT)
+    session.add_all(
+        [
+            ProductAlias(raw_name=name_key("Arroz Superior"), product=joined),
+            ProductAlias(raw_name=name_key("Arroz (Superior)/ primera"), product=joined),
+        ]
+    )
+    session.commit()
+
+    apply_approved_merges(session)
+
+    assert joined.name == "Arroz (Superior)/ primera"
+
+
+def test_no_approved_canonical_name_is_itself_merged_away():
+    old_names = {name_key(old) for old, _ in APPROVED_MERGES}
+
+    assert not {name_key(canon) for _, canon in APPROVED_MERGES} & old_names
+
+
+def test_a_database_loaded_before_the_approval_catches_up_on_the_approved_merges(session, catalog):
+    # Production was loaded with "Arroz Superior" apart from "Arroz (Superior)/ primera".
+    old = Product(name="Arroz Superior", category="Cereales", base_unit=BaseUnit.UNIT)
+    canon = Product(name="Arroz (Superior)/ primera", category="Cereales", base_unit=BaseUnit.UNIT)
+    session.add_all(
+        [
+            ProductAlias(raw_name=name_key(old.name), product=old),
+            ProductAlias(raw_name=name_key(canon.name), product=canon),
+            price(old, catalog["market"], catalog["unit"], date(2018, 2, 8)),
+            price(canon, catalog["market"], catalog["unit"], date(2018, 2, 15)),
+        ]
+    )
+    session.commit()
+
+    assert apply_approved_merges(session) == []
+    assert apply_approved_merges(session) == []
+
+    assert not old.is_active
+    assert session.query(Price).filter(Price.product_id == canon.id).count() == 2

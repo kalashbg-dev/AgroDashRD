@@ -18,6 +18,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from agrodash.accounts.models import User
+from agrodash.catalog.admin import apply_approved_merges
 from agrodash.catalog.models import BaseUnit, MarketKind, Unit
 from agrodash.catalog.resolver import CatalogResolver
 from agrodash.ingestion.models import (
@@ -118,6 +119,8 @@ def ingest_file(
 ) -> IngestionRun:
     """Load one report file and return its run (the earlier run if it was already loaded)."""
     digest = sha256(content).hexdigest()
+    # Before reading names, so this load already finds the approved merges applied.
+    apply_approved_merges(session)
     loaded = loaded_run(session, content)
     if loaded is not None:
         return loaded

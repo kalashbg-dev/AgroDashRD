@@ -1,12 +1,13 @@
 """Catalog changes an admin makes: confirm aliases, rename, merge and retire products."""
 
 from sqlalchemy import func, select, update
-from sqlalchemy.orm import Session, aliased
+from sqlalchemy.orm import Session, aliased, selectinload
 
 from agrodash.accounts.models import User
 from agrodash.accounts.service import can_manage
+from agrodash.catalog.approved_merges import APPROVED_MERGES
 from agrodash.catalog.models import Market, Product, ProductAlias
-from agrodash.ingestion.normalize import clean_name
+from agrodash.ingestion.normalize import clean_name, name_key
 from agrodash.prices.models import Price, PriceSource
 
 
@@ -48,8 +49,42 @@ def merge_products(session: Session, actor: User, source_id: int, target_id: int
     _check(actor)
     if source_id == target_id:
         raise CatalogError("A product cannot be merged into itself")
-    source = _get(session, Product, source_id)
-    target = _get(session, Product, target_id)
+    return _merge(session, _get(session, Product, source_id), _get(session, Product, target_id))
+
+
+def apply_approved_merges(session: Session) -> list[tuple[str, str]]:
+    """Merge the approved product pairs (audit G7) wherever both are still apart.
+
+    A database loaded before the approval, or any copy of it, catches up on its next
+    load; pairs already merged are skipped. Returns (name, reason) for refused pairs.
+    """
+    aliases = session.scalars(select(ProductAlias).options(selectinload(ProductAlias.product)))
+    owners = {alias.raw_name: alias.product for alias in aliases}
+    problems = []
+    for old, canon in APPROVED_MERGES:
+        source, target = owners.get(name_key(old)), owners.get(name_key(canon))
+        if (
+            source is not None
+            and target in (None, source)
+            and source.name == old
+            and not session.scalar(select(Product.id).where(Product.name == canon))
+        ):
+            # Already one product, loaded under the old name: show the approved one.
+            source.name = canon
+            session.commit()
+        if source is None or target is None or source.id == target.id:
+            continue
+        try:
+            _merge(session, source, target)
+        except CatalogError as error:
+            session.rollback()
+            problems.append((old, str(error)))
+            continue
+        owners = {key: target if owner is source else owner for key, owner in owners.items()}
+    return problems
+
+
+def _merge(session: Session, source: Product, target: Product) -> Product:
     if not target.is_active:
         raise CatalogError("Cannot merge into a retired product")
     theirs = aliased(Price)
