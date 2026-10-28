@@ -82,6 +82,8 @@ class Price(Base):
     price_per_base_unit: Mapped[Decimal] = mapped_column(Numeric(14, 4))
     # A field report far from the official series; reviewers see it flagged.
     is_outlier: Mapped[bool] = mapped_column(default=False, server_default=false())
+    # An official week that repeats the previous week's prices (audit G3): shown, not forecast.
+    repeated: Mapped[bool] = mapped_column(default=False, server_default=false())
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     product: Mapped[Product] = relationship()

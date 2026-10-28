@@ -40,6 +40,7 @@ from agrodash.ingestion.normalize import (
 )
 from agrodash.ingestion.readers import UnreadableFile, detect_layout, is_blank, read_rows
 from agrodash.ingestion.repair import (
+    WHOLESALE_PRICE_COLUMN,
     WHOLESALE_UNIT_WORDS,
     UnitLedger,
     duplicate_block_rows,
@@ -201,6 +202,7 @@ class _Load:
         # Last priced amount per market and product (audit M1/M2): drift and recovery
         # compare consecutive rows, the level band in _store uses neighboring weeks.
         self._ledger = UnitLedger()
+        self._repeated_rows: set[int] = set()
 
     def load(self, rows: list[list[object]]) -> None:
         if self.run.layout is SourceLayout.RETAIL:
@@ -234,7 +236,9 @@ class _Load:
                 repaired.rows, date_columns, 3
             )
         duplicates = duplicate_block_rows(repaired.rows, date_columns)
-        repeated = repeated_week_rows(repaired.rows, date_columns)
+        price_columns = RETAIL_MARKET_COLUMNS if unit_column is None else (WHOLESALE_PRICE_COLUMN,)
+        # G3: a repeated week still stores, marked so forecasts skip it.
+        self._repeated_rows = repeated_week_rows(repaired.rows, date_columns, price_columns)
         # Copy detection compares whole content, so it runs before any cell is voided.
         if unit_column is None:
             nullify_copied_market_columns(repaired.rows, date_columns, RETAIL_MARKET_COLUMNS)
@@ -262,14 +266,6 @@ class _Load:
                     row,
                     RejectionReason.UNEXPECTED_LAYOUT,
                     "duplicate block (identical to an earlier period)",
-                )
-                continue
-            if row_number in repeated:
-                self._reject(
-                    row_number,
-                    row,
-                    RejectionReason.UNEXPECTED_LAYOUT,
-                    "repeated price (identical to previous week)",
                 )
                 continue
             if row_number in slid:
@@ -493,6 +489,7 @@ class _Load:
                     "price_type": observation.price_type,
                     "source": PriceSource.OFFICIAL,
                     "status": PriceStatus.VALIDATED,
+                    "repeated": observation.row_number in self._repeated_rows,
                     "amount": amount,
                     "price_per_base_unit": converted,
                 }

@@ -9,6 +9,7 @@ from agrodash.ingestion.repair import (
     nullify_copied_market_columns,
     peer_median,
     repair_rows,
+    repeated_week_rows,
     shifted_market_cells,
     shifted_price_blocks,
     unit_in_effect,
@@ -383,8 +384,34 @@ def test_a_week_split_by_stray_rows_is_not_a_repeat():
 
 def test_a_block_identical_to_an_earlier_week_under_another_label_is_quarantined():
     june = wholesale_block("Segunda", "Junio", "2022", [100 + i for i in range(6)])
+    july = wholesale_block("Primera", "Julio", "2022", [200 + i for i in range(6)])
     november = wholesale_block("Primera", "Noviembre", "2022", [100 + i for i in range(6)])
 
-    fired = duplicate_block_rows(number(june + november), WHOLESALE_DATE_COLUMNS)
+    fired = duplicate_block_rows(number(june + july + november), WHOLESALE_DATE_COLUMNS)
 
-    assert fired == set(range(8, 14))
+    assert fired == set(range(14, 20))
+
+
+def test_a_copy_of_the_week_right_before_is_left_to_the_repeated_week_check():
+    september = wholesale_block("Quinta", "Septiembre", "2024", [100 + i for i in range(12)])
+    october = wholesale_block("Primera", "Octubre", "2024", [100 + i for i in range(12)])
+
+    assert not duplicate_block_rows(number(september + october), WHOLESALE_DATE_COLUMNS)
+
+
+def test_a_week_repeating_the_previous_week_across_a_month_change_is_repeated():
+    september = wholesale_block("Quinta", "Septiembre", "2024", [100 + i for i in range(12)])
+    october = wholesale_block("Primera", "Octubre", "2024", [100 + i for i in range(11)] + [500])
+    november = wholesale_block("Primera", "Noviembre", "2024", [300 + i for i in range(12)])
+    rows = number(september + october + november)
+
+    assert repeated_week_rows(rows, WHOLESALE_DATE_COLUMNS, (4,)) == set(range(14, 26))
+
+
+def test_a_week_carrying_the_next_week_pasted_below_is_not_its_source():
+    # Retail Cuarta octubre 2022 holds its own prices and then the Quinta's, pasted.
+    fourth = wholesale_block("Cuarta", "Octubre", "2022", [100 + i for i in range(12)])
+    fifth = wholesale_block("Quinta", "Octubre", "2022", [300 + i for i in range(12)])
+    rows = number(fourth + [r[:5] + ["Cuarta", "Octubre", "2022"] for r in fifth] + fifth)
+
+    assert not repeated_week_rows(rows, WHOLESALE_DATE_COLUMNS, (4,))

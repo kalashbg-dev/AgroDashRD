@@ -647,6 +647,24 @@ def test_a_whole_legitimate_price_spike_inside_the_level_band_stores(session):
     assert reasons(run) == {}
 
 
+def test_a_week_repeating_the_previous_week_stores_marked_as_repeated(session):
+    # Audit G3: wholesale Primera octubre 2024 repeats Quinta septiembre cell by cell.
+    content = wholesale(
+        *[
+            f"Producto {i};Cereales;Mayorista;Quintal;{100 + i};{week};{month};2024"
+            for week, month in (("Quinta", "Septiembre"), ("Primera", "Octubre"))
+            for i in range(12)
+        ]
+    )
+
+    run = load(session, "mayorista.csv", content)
+
+    assert (run.prices_loaded, run.rows_rejected) == (24, 0)
+    repeated = session.query(Price).filter(Price.repeated).all()
+    assert {price.observed_on for price in repeated} == {date(2024, 10, 1)}
+    assert len(repeated) == 12
+
+
 def test_a_lasting_level_change_stores_on_both_sides(session):
     # Ají Gustoso's case: the series moves to another scale and stays there; every
     # row agrees with the weeks on one side of it, so nothing is a wrong unit.

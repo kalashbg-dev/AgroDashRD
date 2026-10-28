@@ -149,3 +149,15 @@ def test_months_the_reports_skipped_still_count_their_four_weeks(session, catalo
     ]
     assert data.frame["y"].tolist() == [10.0, 11.0, 12.0, 13.0, 14.0]
     assert data.imputed == {key(catalog, rice).uid: 3}
+
+
+def test_repeated_weeks_stay_out_of_training(session, catalog):
+    rice, *_ = catalog
+    add_price(session, catalog, rice, "Primera", "Agosto", 2023, "10")
+    add_price(session, catalog, rice, "Segunda", "Agosto", 2023, "10", repeated=True)
+    add_price(session, catalog, rice, "Tercera", "Agosto", 2023, "12")
+    session.commit()
+
+    data = load_training_data(session, [key(catalog, rice)])
+
+    assert data.frame["y"].tolist() == [10.0, 11.0, 12.0]
