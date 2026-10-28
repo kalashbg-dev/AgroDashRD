@@ -1,4 +1,9 @@
-from agrodash.ingestion.repair import nullify_copied_market_columns, repair_rows
+from agrodash.ingestion.repair import (
+    nullify_copied_market_columns,
+    repair_rows,
+    shifted_market_cells,
+    shifted_price_blocks,
+)
 
 DATE_COLUMNS = (5, 6, 7)
 
@@ -140,3 +145,87 @@ def test_a_column_repeating_itself_across_weeks_is_not_voided():
 
     assert voided == set()
     assert [cells[9] for cells in rows] == [100] * 24
+
+
+WHOLESALE_DATE_COLUMNS = (5, 6, 7)
+
+
+def wholesale_block(week, month, year, prices):
+    rows = []
+    for index, price in enumerate(prices, start=1):
+        rows.append(
+            [f"Producto {index}", "Cereales", "Mayorista", "Quintal", price, week, month, year]
+        )
+    return rows
+
+
+def test_a_wholesale_week_whose_price_column_slid_down_is_quarantined():
+    rows = (
+        wholesale_block("Tercera", "Junio", "2025", [100 + i for i in range(12)])
+        + wholesale_block("Cuarta", "Junio", "2025", [None] + [100 + i for i in range(11)])
+        + wholesale_block("Quinta", "Junio", "2025", [200 + i for i in range(12)])
+    )
+
+    fired = shifted_price_blocks(number(rows), WHOLESALE_DATE_COLUMNS)
+
+    assert fired == set(range(14, 26))
+    assert not (fired & set(range(2, 14)))
+
+
+def test_a_wholesale_week_that_matches_a_sane_following_week_one_row_up_is_quarantined():
+    rows = (
+        wholesale_block("Primera", "Julio", "2025", [None] + [300 + i for i in range(11)])
+        + wholesale_block("Segunda", "Julio", "2025", [300 + i for i in range(12)])
+    )
+
+    fired = shifted_price_blocks(number(rows), WHOLESALE_DATE_COLUMNS)
+
+    assert fired == set(range(2, 14))
+
+
+def test_a_regular_wholesale_week_is_not_quarantined():
+    rows = (
+        wholesale_block("Primera", "Junio", "2025", [100 + i for i in range(12)])
+        + wholesale_block("Segunda", "Junio", "2025", [100 + i for i in range(12)])
+    )
+
+    assert not shifted_price_blocks(number(rows), WHOLESALE_DATE_COLUMNS)
+
+
+def test_a_short_sam_name_priced_overlap_does_not_fire():
+    rows = (
+        wholesale_block("Primera", "Junio", "2025", [100 + i for i in range(6)])
+        + wholesale_block("Segunda", "Junio", "2025", [None] + [100 + i for i in range(5)])
+    )
+
+    assert not shifted_price_blocks(number(rows), WHOLESALE_DATE_COLUMNS)
+
+
+def test_a_retail_market_column_that_slid_down_is_voided():
+    rows = [
+        retail_row(f"Arroz {i}", "Primera", [500 + i, 510 + i, 520 + i, 530 + i, 540 + i, 550 + i, 560 + i])
+        for i in range(12)
+    ] + [
+        retail_row(f"Arroz {i}", "Segunda", [950 + i, 960 + i, 970 + i, None, None, None, None])
+        for i in range(12)
+    ]
+    # Primera's Los Mina column (the third market) carries Segunda's prices one row
+    # up: nothing first, then the value that belongs to the row above of the same
+    # product's name in Segunda.
+    for index in range(1, 12):
+        rows[index][6] = 970 + index - 1
+
+    voided = shifted_market_cells(number(rows), RETAIL_DATE_COLUMNS, RETAIL_MARKET_COLUMNS)
+
+    assert voided == {row_number: {6} for row_number in range(2, 14)}
+
+
+def test_the_los_mina_column_marked_by_the_audit_is_voided_without_signal():
+    rows = [
+        retail_row(f"Arroz {i}", "Segunda", [20 + i, 30 + i, 40 + i, None, None, None, None], "Agosto", "2017")
+        for i in range(12)
+    ]
+
+    voided = shifted_market_cells(number(rows), RETAIL_DATE_COLUMNS, RETAIL_MARKET_COLUMNS)
+
+    assert voided == {row_number: {6} for row_number in range(2, 14)}

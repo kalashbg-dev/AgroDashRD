@@ -45,6 +45,8 @@ from agrodash.ingestion.repair import (
     repeated_week_rows,
     retail_average_rows,
     retail_weeks_with_wholesale_units,
+    shifted_market_cells,
+    shifted_price_blocks,
 )
 from agrodash.prices.models import (
     Price,
@@ -228,6 +230,23 @@ class _Load:
                 repaired.rows, date_columns, RETAIL_MARKET_COLUMNS
             )
         )
+        slid = (
+            set()
+            if unit_column is None
+            else shifted_price_blocks(repaired.rows, date_columns)
+        )
+        slid_cells = (
+            {}
+            if unit_column is not None
+            else shifted_market_cells(repaired.rows, date_columns, RETAIL_MARKET_COLUMNS)
+        )
+        if slid_cells:
+            rows_by_number = dict(repaired.rows)
+            for row_number, columns in slid_cells.items():
+                row = rows_by_number[row_number]
+                for column in columns:
+                    if column < len(row) and row[column] is not None:
+                        row[column] = None
         for row_number, row in repaired.rows:
             self.run.rows_read += 1
             if row_number in averages:
@@ -243,6 +262,12 @@ class _Load:
                 self._reject(
                     row_number, row, RejectionReason.UNEXPECTED_LAYOUT,
                     "repeated price (identical to previous week)"
+                )
+                continue
+            if row_number in slid:
+                self._reject(
+                    row_number, row, RejectionReason.UNEXPECTED_LAYOUT,
+                    "price column shifted one row"
                 )
                 continue
             parse_row(row_number, row)
