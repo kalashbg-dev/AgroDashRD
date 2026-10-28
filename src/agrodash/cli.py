@@ -214,6 +214,13 @@ def _quality_report(args: argparse.Namespace) -> int:
     print(f"Possible renamed products: {len(report.rename_candidates)}")
     for old, new, days in report.rename_candidates:
         print(f"  {old} -> {new} ({days} days later)")
+    print("Partial weeks (a product priced before and after is missing that week):")
+    for entry in report.partial_weeks[:SHOWN_NAMES]:
+        shown = ", ".join(entry.missing[:5])
+        more = "..." if len(entry.missing) > 5 else ""
+        print(f"  {entry.week} {entry.price_type}: {len(entry.missing)} missing ({shown}{more})")
+    if len(report.partial_weeks) > SHOWN_NAMES:
+        print(f"  ... and {len(report.partial_weeks) - SHOWN_NAMES} more weeks")
     if args.series_csv:
         try:
             with args.series_csv.open("w", newline="", encoding="utf-8") as file:

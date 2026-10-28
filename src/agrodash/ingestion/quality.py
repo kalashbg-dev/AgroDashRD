@@ -1,7 +1,7 @@
 """Data-quality report: what was rejected, which names still need review, and which
 price series are long, dense and current enough to forecast."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, timedelta
 
 from sqlalchemy import extract, func, select
@@ -44,6 +44,21 @@ class SeriesCoverage:
 
 
 @dataclass(frozen=True)
+class PartialWeek:
+    price_type: str
+    week: date
+    missing: tuple[str, ...]
+    # A product priced at a weekly step before and after this published week,
+    # but not here (audit M4). The report only marks the week partial; nothing
+    # is interpolated to fill it.
+
+
+# A product whose consecutive present dates are at most two weekly steps apart
+# left exactly one published week in between: that week is a cut, not a rename.
+PARTIAL_MAX_GAP = timedelta(weeks=2)
+
+
+@dataclass(frozen=True)
 class QualityReport:
     official_prices: dict[PriceType, int]
     pending_reports: int
@@ -55,6 +70,7 @@ class QualityReport:
     latest_observation: date | None
     series: list[SeriesCoverage]
     rename_candidates: list[tuple[str, str, int]]
+    partial_weeks: list[PartialWeek] = field(default_factory=list)
 
     @property
     def ready_series(self) -> list[SeriesCoverage]:
@@ -92,6 +108,46 @@ def build_report(session: Session) -> QualityReport:
         latest_observation=latest,
         series=series_coverage(session),
         rename_candidates=rename_candidates(session),
+        partial_weeks=partial_weeks(session),
+    )
+
+
+def partial_weeks(session: Session) -> list[PartialWeek]:
+    """Published weeks a product skips while pricing before and after (audit M4).
+
+    A skip is a cut, not a rename, when the product's consecutive present dates
+    are at most one weekly step plus the skipped week apart: its report week is
+    partial and should be reviewed, never interpolated. Wholesale and retail
+    weeks are judged separately, and the list sorts by missing-product count.
+    """
+    rows = session.execute(
+        select(Price.price_type, Price.product_id, Product.name, Price.observed_on)
+        .join(Product, Price.product_id == Product.id)
+        .where(Price.source == PriceSource.OFFICIAL, Price.status == PriceStatus.VALIDATED)
+        .distinct()
+        .order_by(Price.price_type, Price.product_id, Price.observed_on)
+    ).all()
+    published: dict[str, set[date]] = {}
+    for price_type, _, _, observed_on in rows:
+        published.setdefault(price_type.value, set()).add(observed_on)
+    last_seen: dict[tuple[str, int], date] = {}
+    cut: dict[tuple[str, date], list[str]] = {}
+    for price_type, product_id, name, observed_on in rows:
+        price_type_name = price_type.value
+        previous = last_seen.get((price_type_name, product_id))
+        if previous is not None and observed_on - previous <= PARTIAL_MAX_GAP:
+            for mid in published[price_type_name]:
+                if previous < mid < observed_on:
+                    entry = cut.setdefault((price_type_name, mid), [])
+                    if name not in entry:
+                        entry.append(name)
+        last_seen[(price_type_name, product_id)] = observed_on
+    return sorted(
+        (
+            PartialWeek(price_type=price_type_name, week=week, missing=tuple(names_list))
+            for (price_type_name, week), names_list in cut.items()
+        ),
+        key=lambda entry: (-len(entry.missing), entry.week, entry.price_type),
     )
 
 

@@ -6,6 +6,7 @@ from agrodash.ingestion.repair import (
     UnitLedger,
     UnitSighting,
     nullify_copied_market_columns,
+    peer_median,
     repair_rows,
     shifted_market_cells,
     shifted_price_blocks,
@@ -334,3 +335,19 @@ def test_the_ledger_keeps_the_last_sighting_per_market_and_price_type():
     assert ledger.last("mayorista", "ajo")["Referencia mayorista"].amount == Decimal(120)
     assert ledger.last("minorista", "ajo")["Mercado Nuevo"].amount == Decimal(30)
     assert ledger.last("mayorista", "papa") == {}
+
+
+def test_the_peer_level_needs_two_row_cells_to_judge():
+    assert peer_median([Decimal(10)]) is None
+    assert peer_median([]) is None
+
+
+def test_the_peer_level_is_the_row_mid_price():
+    assert peer_median([Decimal(10), Decimal(20)]) == Decimal(15)
+    assert peer_median([Decimal(10), Decimal(20), Decimal(40)]) == Decimal(20)
+
+
+def test_the_peer_level_ignores_construction_order():
+    values = [Decimal(9), Decimal(40), Decimal(40), Decimal(40), Decimal(300), Decimal(40)]
+
+    assert peer_median(values) == Decimal(40)

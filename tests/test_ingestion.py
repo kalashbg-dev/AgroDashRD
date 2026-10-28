@@ -638,3 +638,80 @@ def test_a_whole_legitimate_price_spike_inside_the_level_band_stores(session):
 
     assert (run.prices_loaded, run.rows_rejected) == (5, 0)
     assert reasons(run) == {}
+
+
+def test_a_retail_cell_far_from_its_row_peers_is_quarantined_alone(session):
+    # Mercado Nuevo loses a digit relative to the other five markets of the row;
+    # only that cell is quarantined and the row's other markets keep storing.
+    content = (
+        RETAIL_HEADER
+        + "Berenjena;Hortalizas;Minorista;lb;9;40;40;40;40;40;N/D;Primera;Junio;2024\r\n"
+    )
+
+    run = load(session, "minorista.csv", content.encode("latin-1"))
+
+    assert (run.prices_loaded, run.rows_rejected) == (5, 1)
+    assert reasons(run) == {RejectionReason.UNIT_MISMATCH: 1}
+    detail = run.quarantined_rows[-1].detail
+    assert "lb converts to" in detail
+    assert "5 retail markets of that week price around 40.0000" in detail
+    nuevo = session.query(Price).join(Market).filter(Market.name == "Mercado Nuevo").all()
+    consuelo = session.query(Price).join(Market).filter(Market.name == "Mercado Villa Consuelo").all()
+    assert nuevo == []
+    assert consuelo
+
+
+def test_a_retail_cell_within_the_row_band_stores(session):
+    # Cristo Rey prices 3x the row's level; inside [1/4x, 4x] that is a real
+    # price difference and must store.
+    content = (
+        RETAIL_HEADER
+        + "Berenjena;Hortalizas;Minorista;lb;40;40;40;40;120;40;N/D;Primera;Junio;2024\r\n"
+    )
+
+    run = load(session, "minorista.csv", content.encode("latin-1"))
+
+    assert (run.prices_loaded, run.rows_rejected) == (6, 0)
+    assert reasons(run) == {}
+
+
+def test_a_retail_cell_with_one_priced_peer_is_not_judged_nor_a_lone_pair(session):
+    # With only Conaprope priced besides Supermercado, no cell has the two peers
+    # a spatial judgement needs, so both store.
+    content = (
+        RETAIL_HEADER
+        + "Berenjena;Hortalizas;Minorista;lb;N/D;N/D;N/D;N/D;N/D;40;300;Primera;Junio;2024\r\n"
+    )
+
+    run = load(session, "minorista.csv", content.encode("latin-1"))
+
+    assert (run.prices_loaded, run.rows_rejected) == (2, 0)
+    assert reasons(run) == {}
+
+
+def test_a_super_cell_far_from_the_row_peers_is_quarantined(session):
+    # Supermercado stores are checked against the row's six ordinary markets too;
+    # a 7.5x row outlier loses its cell while the ordinary markets keep storing.
+    content = (
+        RETAIL_HEADER
+        + "Berenjena;Hortalizas;Minorista;lb;40;40;40;40;40;40;300;Primera;Junio;2024\r\n"
+    )
+
+    run = load(session, "minorista.csv", content.encode("latin-1"))
+
+    assert (run.prices_loaded, run.rows_rejected) == (6, 1)
+    assert reasons(run) == {RejectionReason.UNIT_MISMATCH: 1}
+    super_market = session.query(Market).filter(Market.name == "Supermercado").one()
+    assert session.query(Price).filter(Price.market_id == super_market.id).count() == 0
+
+
+def test_a_wholesale_row_never_faces_row_peers(session):
+    # One cell per row: no peers exist, so the wholesale flow is untouched by M3.
+    content = wholesale(
+        "Zapote;Frutas;Mayorista;Saco/100 lb;20000;Primera;Junio;2024",
+    )
+
+    run = load(session, "mayorista.csv", content)
+
+    assert (run.prices_loaded, run.rows_rejected) == (1, 0)
+    assert reasons(run) == {}

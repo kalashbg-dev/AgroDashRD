@@ -240,3 +240,41 @@ def test_quarantine_lists_rejected_rows_and_filters_by_reason(session):
         ("m.csv", 4, "unknown_unit")
     ]
     assert [run.file_name for run in quality.recent_runs(session)] == ["m.csv"]
+
+
+def test_partial_weeks_flag_products_missing_between_adjacent_weeks(session):
+    # "Mango" reports weeks 1 and 3 of July and skips week 2: a cut week the
+    # report published for other products. "Dormant" disappears for a whole
+    # month: a renamer, not a partial week. Nothing is interpolated.
+    add_series(session, "Mango", {(2026, 7): [1, 3]})
+    add_series(session, "Always", {(2026, 7): [1, 2, 3, 4]})
+    add_series(session, "Dormant", {(2026, 7): [1], (2026, 8): [3]})
+
+    report = build_report(session)
+
+    partials = [(w.price_type, w.week, w.missing) for w in report.partial_weeks]
+    assert partials == [("retail", date(2026, 7, 8), ("Mango",))]
+
+
+def test_partial_weeks_order_by_missing_count(session):
+    add_series(session, "Solo", {(2026, 7): [1, 3], (2026, 8): [1, 3]})
+    add_series(session, "Solo2", {(2026, 7): [1, 3], (2026, 8): [1, 3]})
+    add_series(session, "Always", {(2026, 7): [2], (2026, 8): [2]})
+    add_series(session, "Publishes", {(2026, 7): [1, 2, 3]}, price_type=PriceType.WHOLESALE)
+    add_series(session, "CutsThere", {(2026, 7): [1, 3]}, price_type=PriceType.WHOLESALE)
+
+    report = build_report(session)
+
+    counts = [(w.price_type, w.week, len(w.missing)) for w in report.partial_weeks]
+    assert counts == [
+        ("retail", date(2026, 7, 8), 2),
+        ("retail", date(2026, 8, 8), 2),
+        ("wholesale", date(2026, 7, 8), 1),
+    ]
+
+
+def test_the_quality_report_command_lists_partial_weeks(cli_database, capsys):
+    cli.main(["quality-report"])
+    out = capsys.readouterr().out
+
+    assert "Partial weeks (a product priced before and after is missing that week):" in out

@@ -42,6 +42,7 @@ from agrodash.ingestion.repair import (
     UnitLedger,
     duplicate_block_rows,
     nullify_copied_market_columns,
+    peer_median,
     repair_rows,
     repeated_week_rows,
     retail_average_rows,
@@ -418,6 +419,7 @@ class _Load:
         series_units = self._series_base_units(resolved, product_ids)
         stored = self._stored_keys(product_ids)
         levels = self._level_context(product_ids, resolved)
+        spatial = self._peer_levels(resolved)
         seen = set()
         prices = []
         for observation, product, market in resolved:
@@ -461,6 +463,27 @@ class _Load:
                 )
                 self._reject_observation(observation, RejectionReason.UNIT_MISMATCH, detail)
                 continue
+            # Audit M3: a market quoting off the scale of the same row's other
+            # markets (a slipped digit or another unit) loses that cell alone;
+            # the row's other markets never lose theirs.
+            peer_values = self._row_peers(
+                spatial,
+                observation.raw_name,
+                observation.observed_on,
+                observation.price_type,
+                market.id,
+            )
+            reference = peer_median(peer_values)
+            if reference is not None and (
+                converted > reference * LEVEL_FACTOR or converted < reference / LEVEL_FACTOR
+            ):
+                detail = (
+                    f"{unit.label} converts to {converted} per {unit.base_unit}, but the "
+                    f"other {len(peer_values)} retail markets of that week price around "
+                    f"{reference} for {product.name}"
+                )
+                self._reject_observation(observation, RejectionReason.UNIT_MISMATCH, detail)
+                continue
             seen.add(key)
             self.accepted += 1
             if key in stored:
@@ -484,6 +507,31 @@ class _Load:
         self.run.prices_loaded = len(prices)
         # A retail row can have several rejected cells; count each row once.
         self.run.rows_rejected = len({rejection["row_number"] for rejection in self.rejections})
+
+    def _peer_levels(self, resolved) -> dict[tuple, dict[int, Decimal]]:
+        """Converted prices per (name, week, price type) for audit M3's row peers.
+
+        Each map holds one price per ordinary retail market; Supermercado cells
+        never enter it: Super prices face the six ordinary peers both when
+        Supermercado is the checked cell and when an ordinary cell is checked, so
+        the ordinary scale always owns the reference.
+        """
+        peers = {}
+        for observation, product, market in resolved:
+            if market.kind == MarketKind.SUPERMARKET:
+                continue
+            value = per_base_unit(observation.amount, observation.unit.factor)
+            if value is None or value <= 0:
+                continue
+            key = (name_key(observation.raw_name), observation.observed_on, observation.price_type)
+            peers.setdefault(key, {})[market.id] = value
+        return peers
+
+    @staticmethod
+    def _row_peers(spatial, raw_name, observed_on, price_type, market_id: int) -> list[Decimal]:
+        """The same name+week+type cohort's converted prices from other markets."""
+        peers = spatial.get((name_key(raw_name), observed_on, price_type), {})
+        return [value for peer_market, value in peers.items() if peer_market != market_id]
 
     def _level_context(self, product_ids: set[int], resolved) -> tuple[dict, dict]:
         """Level evidence for audit M2, split so one odd row cannot move the reference.
