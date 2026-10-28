@@ -38,7 +38,13 @@ from agrodash.ingestion.normalize import (
     parse_week_date,
 )
 from agrodash.ingestion.readers import UnreadableFile, detect_layout, is_blank, read_rows
-from agrodash.ingestion.repair import repair_rows, retail_average_rows
+from agrodash.ingestion.repair import (
+    duplicate_block_rows,
+    repair_rows,
+    repeated_week_rows,
+    retail_average_rows,
+    retail_weeks_with_wholesale_units,
+)
 from agrodash.prices.models import (
     Price,
     PriceSource,
@@ -175,6 +181,10 @@ class _Load:
         self.accepted = 0
         # Cells exactly as read, by row number, so quarantine shows the source.
         self.originals: dict[int, list[object]] = {}
+        # Retail weeks whose unit column was pasted from the wholesale report (G5, Caso 1).
+        self._wholesale_unit_rows: set[int] = set()
+        # Last retail unit text seen per product, used to recover units in corrupted weeks.
+        self._product_units: dict[str, str] = {}
 
     def load(self, rows: list[list[object]]) -> None:
         if self.run.layout is SourceLayout.RETAIL:
@@ -203,10 +213,28 @@ class _Load:
             if unit_column is None
             else retail_average_rows(repaired.rows, date_columns, unit_column)
         )
+        if unit_column is None:
+            self._wholesale_unit_rows = retail_weeks_with_wholesale_units(
+                repaired.rows, date_columns, 3
+            )
+        duplicates = duplicate_block_rows(repaired.rows, date_columns)
+        repeated = repeated_week_rows(repaired.rows, date_columns)
         for row_number, row in repaired.rows:
             self.run.rows_read += 1
             if row_number in averages:
                 self._reject(row_number, row, RejectionReason.UNEXPECTED_LAYOUT, RETAIL_AVERAGES)
+                continue
+            if row_number in duplicates:
+                self._reject(
+                    row_number, row, RejectionReason.UNEXPECTED_LAYOUT,
+                    "duplicate block (identical to an earlier period)"
+                )
+                continue
+            if row_number in repeated:
+                self._reject(
+                    row_number, row, RejectionReason.UNEXPECTED_LAYOUT,
+                    "repeated price (identical to previous week)"
+                )
                 continue
             parse_row(row_number, row)
 
@@ -237,9 +265,29 @@ class _Load:
         amounts = self._amounts(row_number, row, cells)
         name, rubro, _, unit_text = row[:4]
         week, month, year = row[11:14]
+        # G5, Caso 1: when the unit column was pasted from the wholesale report, recover
+        # the product's retail unit from the previous week it appeared in.
+        raw_unit_text = unit_text
+        if row_number in self._wholesale_unit_rows:
+            recovered = self._product_units.get(name_key(str(name)))
+            if recovered is not None:
+                unit_text = recovered
+            else:
+                self._reject(
+                    row_number,
+                    row,
+                    RejectionReason.UNKNOWN_UNIT,
+                    "wholesale unit in a retail week, no previous week to recover from",
+                )
+                return
         self._observe(
             row_number, row, amounts, (name, rubro, unit_text, week, month, year), PriceType.RETAIL
         )
+        # Track the last retail unit per product for future recovery.
+        if row_number not in self._wholesale_unit_rows and str(raw_unit_text or "").strip():
+            folded = fold(raw_unit_text)
+            if not any(word in folded for word in ("saco", "quintal", "ciento", "caja", "bulto")) and "n/d" not in folded:
+                self._product_units[name_key(str(name))] = str(raw_unit_text)
 
     def _amounts(self, row_number, row, cells) -> list[tuple[str, Decimal]]:
         amounts = []

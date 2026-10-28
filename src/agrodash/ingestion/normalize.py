@@ -158,6 +158,16 @@ def repair_name(name: str) -> str:
     return _ENYE_AS_SEMICOLON.sub("ñ", str(name))
 
 
+def repair_zero_to_dash(name: str) -> str:
+    """Restore a '-' that a bulk find/replace turned into '0' in product names.
+
+    "FHIA 0 20" -> "FHIA - 20", "H0202" -> "H-202", "Semíl034" -> "Semíl-34":
+    a '0' surrounded by letters or digits is almost always a dash that got replaced.
+    Only applied when the result matches an existing product (see CatalogResolver).
+    """
+    return re.sub(r"(?<=[A-Za-z0-9ÁÉÍÓÚáéíóú\s])0(?=[A-Za-z0-9ÁÉÍÓÚáéíóú\s])", "-", str(name))
+
+
 def same_product_name(left_key: str, right_key: str) -> bool:
     """Whether two name keys differ only by a typo in one word.
 
