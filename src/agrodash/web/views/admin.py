@@ -130,6 +130,7 @@ with quarantine_tab:
                 "Fila": [row.row_number for row in rows],
                 "Motivo": [REASONS.get(row.reason, row.reason) for row in rows],
                 "Detalle": [row.detail for row in rows],
+                "Fila original": [row.original for row in rows],
             }
         ),
         hide_index=True,

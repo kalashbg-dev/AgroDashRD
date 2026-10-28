@@ -1,6 +1,7 @@
 """Data-quality report: what was rejected, which names still need review, and which
 price series are long, dense and current enough to forecast."""
 
+import json
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 
@@ -8,8 +9,9 @@ from sqlalchemy import extract, func, select
 from sqlalchemy.orm import Session
 
 from agrodash.catalog.models import Market, Product, ProductAlias, Unit
-from agrodash.ingestion.models import IngestionRun, IngestionStatus, QuarantinedRow
+from agrodash.ingestion.models import IngestionRun, IngestionStatus, QuarantinedRow, SourceLayout
 from agrodash.ingestion.normalize import name_key
+from agrodash.ingestion.readers import COLUMN_NAMES
 from agrodash.prices.models import Price, PriceSource, PriceStatus, PriceType
 
 # A series is ready to forecast with two years of weekly prices, three of every four
@@ -356,6 +358,17 @@ class QuarantineRow:
     reason: str
     detail: str | None
     raw_values: str
+    layout: SourceLayout | None = None
+
+    @property
+    def original(self) -> str:
+        """The row as read, each filled cell named by its column."""
+        names = COLUMN_NAMES.get(self.layout, ())
+        return " · ".join(
+            f"{names[index] if index < len(names) else f'Columna {index + 1}'}: {str(cell).strip()}"
+            for index, cell in enumerate(json.loads(self.raw_values))
+            if cell is not None and str(cell).strip()
+        )
 
 
 def quarantine(
@@ -369,6 +382,7 @@ def quarantine(
             QuarantinedRow.reason,
             QuarantinedRow.detail,
             QuarantinedRow.raw_values,
+            IngestionRun.layout,
         )
         .join(IngestionRun)
         .where(IngestionRun.status == IngestionStatus.SUCCEEDED, IngestionRun.prices_loaded > 0)
@@ -378,8 +392,8 @@ def quarantine(
     if reason:
         query = query.where(QuarantinedRow.reason == reason)
     return [
-        QuarantineRow(file_name, row_number, str(row_reason), detail, raw_values)
-        for file_name, row_number, row_reason, detail, raw_values in session.execute(query)
+        QuarantineRow(file_name, row_number, str(row_reason), detail, raw_values, layout)
+        for file_name, row_number, row_reason, detail, raw_values, layout in session.execute(query)
     ]
 
 

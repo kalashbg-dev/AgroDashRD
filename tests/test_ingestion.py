@@ -281,6 +281,18 @@ def wholesale(*rows: str) -> bytes:
     return "\r\n".join(rows).encode("latin-1")
 
 
+def test_a_wholesale_report_with_a_header_row_skips_it(session):
+    # Today's wholesale report has no header; one added later must not load as a product.
+    content = wholesale(
+        "Producto;Rubro;Categoria;Unidad;Precio;Semana;Mes;Año",
+        "Papa;Raices-Tuberculos;Mayorista;Quintal;1500;Primera;Junio;2018",
+    )
+
+    run = load(session, "mayorista.csv", content)
+
+    assert (run.prices_loaded, run.rows_rejected, run.rows_read) == (1, 0, 1)
+
+
 def test_an_isolated_date_typo_takes_the_date_of_its_agreeing_neighbors(session):
     content = wholesale(
         "Papa;Raices-Tuberculos;Mayorista;Quintal;1500;Primera;Junio;2018",

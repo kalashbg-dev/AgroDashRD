@@ -16,6 +16,40 @@ SUPPORTED_SUFFIXES = (".csv", ".xlsx", ".xls")
 MAX_UNPACKED_BYTES = 200 * 1024 * 1024
 
 
+# What each column holds, by position: the ETL reads both reports positionally. The
+# wholesale report ships without a header row, so these names stand in for it.
+COLUMN_NAMES = {
+    SourceLayout.WHOLESALE: (
+        "Producto",
+        "Rubro",
+        "Categoría",
+        "Unidad",
+        "Precio",
+        "Semana",
+        "Mes",
+        "Año",
+    ),
+    # shortcut: market names as the report printed them in 2017-2026; a run whose header
+    # names other markets loads them under those names but is labelled with these.
+    SourceLayout.RETAIL: (
+        "Producto",
+        "Rubro",
+        "Categoría",
+        "Unidad",
+        "Mercado Nuevo",
+        "Mercado Conaprope",
+        "Mercado Los Mina",
+        "Mercado Villa Consuelo",
+        "Mercado Cristo Rey",
+        "Mercadom",
+        "Supermercado",
+        "Semana",
+        "Mes",
+        "Año",
+    ),
+}
+
+
 class UnreadableFile(ValueError):
     pass
 
@@ -75,6 +109,11 @@ def detect_layout(rows: list[list[object]]) -> SourceLayout:
     if first and first[0] == "productos" and any("mercado" in cell for cell in first):
         return SourceLayout.RETAIL
     return SourceLayout.WHOLESALE
+
+
+def is_header(row: list[object]) -> bool:
+    """Whether a first row names the columns instead of holding a product."""
+    return bool(row) and fold(row[0]) in {"producto", "productos"}
 
 
 def is_blank(row: list[object]) -> bool:
