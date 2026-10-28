@@ -306,6 +306,8 @@ def test_an_approved_old_name_loads_under_its_canonical_product_even_when_seen_f
     assert [product.name for product in session.query(Product).all()] == [
         "Arroz (Superior)/ primera"
     ]
+    product = session.query(Product).one()
+    assert (product.base_name, product.variety, product.grade) == ("Arroz", "Superior", "primera")
 
 
 def test_an_isolated_date_typo_takes_the_date_of_its_agreeing_neighbors(session):

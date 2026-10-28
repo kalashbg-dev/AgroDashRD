@@ -61,6 +61,21 @@ class Product(Base):
     category: Mapped[str] = mapped_column(String(60), index=True)
     base_unit: Mapped[BaseUnit] = mapped_column(enum_column(BaseUnit, "base_unit"))
     is_active: Mapped[bool] = mapped_column(default=True)
+    # What the name states (catalog.names): "Berenjena/ (Pompadur)/ grande/ primera" is
+    # Berenjena, variety Pompadur, size grande, grade primera. Kept in step with the name.
+    base_name: Mapped[str | None] = mapped_column(String(60), index=True)
+    variety: Mapped[str | None] = mapped_column(String(80))
+    color: Mapped[str | None] = mapped_column(String(20))
+    size: Mapped[str | None] = mapped_column(String(20))
+    grade: Mapped[str | None] = mapped_column(String(20))
+
+    def describe(self) -> None:
+        """Set the properties the name states."""
+        from agrodash.catalog.names import name_parts  # names -> normalize -> this module
+
+        parts = name_parts(self.name)
+        self.base_name, self.variety = parts.base[:60], (parts.variety or "")[:80] or None
+        self.color, self.size, self.grade = parts.color, parts.size, parts.grade
 
 
 class ProductAlias(Base):

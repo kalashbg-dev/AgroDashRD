@@ -179,3 +179,11 @@ def test_a_database_loaded_before_the_approval_catches_up_on_the_approved_merges
 
     assert not old.is_active
     assert session.query(Price).filter(Price.product_id == canon.id).count() == 2
+
+
+def test_renaming_a_product_updates_the_properties_its_name_states(session, catalog):
+    product = rename_product(
+        session, catalog["admin"], catalog["old"].id, "Cilantro/ pequeño/ segunda"
+    )
+
+    assert (product.base_name, product.size, product.grade) == ("Cilantro", "pequeño", "segunda")

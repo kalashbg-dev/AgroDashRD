@@ -84,6 +84,7 @@ class CatalogResolver:
             product = Product(
                 name=clean_name(raw_name)[:120], category=category, base_unit=base_unit
             )
+            product.describe()
             self._session.add(product)
         self._session.add(ProductAlias(raw_name=key, product=product, reviewed=False))
         self._products[key] = product

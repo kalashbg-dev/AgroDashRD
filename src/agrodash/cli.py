@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from agrodash.accounts.models import Role
 from agrodash.accounts.service import AccountError, create_user
+from agrodash.catalog.admin import catalog_upkeep
 from agrodash.forecasting.service import ForecastError, run_forecasts
 from agrodash.infra.db import create_db_engine, upgrade_database
 from agrodash.infra.settings import get_settings
@@ -161,6 +162,7 @@ def _ingest(args: argparse.Namespace) -> int:
 
 
 def _ingest_one(session: Session, file_name: str, content: bytes, trigger) -> bool:
+    catalog_upkeep(session)
     if run := loaded_run(session, content):
         print(f"{file_name}: already loaded (run {run.id})")
         return True
