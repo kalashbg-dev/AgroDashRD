@@ -5,6 +5,7 @@ from agrodash.ingestion.normalize import ParsedUnit
 from agrodash.ingestion.repair import (
     UnitLedger,
     UnitSighting,
+    duplicate_block_rows,
     nullify_copied_market_columns,
     peer_median,
     repair_rows,
@@ -351,3 +352,33 @@ def test_the_peer_level_ignores_construction_order():
     values = [Decimal(9), Decimal(40), Decimal(40), Decimal(40), Decimal(300), Decimal(40)]
 
     assert peer_median(values) == Decimal(40)
+
+
+def test_a_month_listed_twice_quarantines_only_the_mislabelled_repeat():
+    # Wholesale abril 2023: the second Primera is mayo's Primera, listed again later.
+    april = [wholesale_block(w, "Abril", "2023", [10 * k + i for i in range(6)])
+             for k, w in enumerate(["Primera", "Segunda"], start=1)]
+    may = wholesale_block("Primera", "Mayo", "2023", [900 + i for i in range(6)])
+    copy = [r[:5] + ["Primera", "Abril", "2023"] for r in may]
+    rows = april[0] + april[1] + copy + may
+
+    fired = duplicate_block_rows(number(rows), WHOLESALE_DATE_COLUMNS)
+
+    assert fired == set(range(14, 20))
+
+
+def test_a_week_split_by_stray_rows_is_not_a_repeat():
+    week = wholesale_block("Tercera", "Septiembre", "2024", [100 + i for i in range(12)])
+    stray = [["Suelto", "Cereales", "Mayorista", "Quintal", 5, "Cuarta", "Octubre", "2024"]] * 2
+    rows = week[:6] + stray + week[6:]
+
+    assert not duplicate_block_rows(number(rows), WHOLESALE_DATE_COLUMNS)
+
+
+def test_a_block_identical_to_an_earlier_week_under_another_label_is_quarantined():
+    june = wholesale_block("Segunda", "Junio", "2022", [100 + i for i in range(6)])
+    november = wholesale_block("Primera", "Noviembre", "2022", [100 + i for i in range(6)])
+
+    fired = duplicate_block_rows(number(june + november), WHOLESALE_DATE_COLUMNS)
+
+    assert fired == set(range(8, 14))
