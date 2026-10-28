@@ -430,3 +430,52 @@ def test_removing_the_farmer_role_stops_when_farmer_accounts_exist(tmp_path):
     with engine.connect() as connection:
         assert connection.execute(text("SELECT role FROM users")).scalar() == "AGRICULTOR"
     engine.dispose()
+
+
+def test_the_ajies_lata_kilo_prices_convert_as_pounds_and_back(tmp_path):
+    url = f"sqlite:///{tmp_path / 'lata.db'}"
+    command.upgrade(alembic_config(url), "3f7a1c9d2e4b")
+    engine = create_db_engine(url)
+    statements = [
+        "INSERT INTO markets (id, name, kind, is_active) VALUES (1, 'Mercado Nuevo', 'retail', 1)",
+        "INSERT INTO products (id, name, category, base_unit, is_active) VALUES"
+        " (1, 'Ají/ Gustoso/ verde/ primera', 'Hortalizas', 'lb', 1),"
+        " (2, 'Papa (Granola)', 'Raices', 'lb', 1)",
+        "INSERT INTO units (id, code, label, base_unit, factor) VALUES"
+        " (1, '2.2046-lb', '2.2046 lb', 'lb', 2.2046), (2, '1-lb', '1 lb', 'lb', 1)",
+        "INSERT INTO unit_aliases (id, raw_text, unit_id) VALUES"
+        " (1, 'Lata/1Kilo', 1), (2, 'Kilo', 1)",
+        "INSERT INTO prices (id, product_id, market_id, unit_id, observed_on, price_type, source,"
+        " status, amount, price_per_base_unit, is_outlier) VALUES"
+        " (1, 1, 1, 1, '2022-07-29', 'retail', 'official', 'validated', 90.91, 41.2361, 0),"
+        " (2, 1, 1, 2, '2022-08-01', 'retail', 'official', 'validated', 100, 100, 0),"
+        " (3, 2, 1, 1, '2022-07-29', 'retail', 'official', 'validated', 30, 13.6079, 0)",
+    ]
+    with engine.begin() as connection:
+        for statement in statements:
+            connection.execute(text(statement))
+
+    command.upgrade(alembic_config(url), "head")
+
+    with engine.connect() as connection:
+        prices = connection.execute(
+            text("SELECT id, unit_id, price_per_base_unit FROM prices ORDER BY id")
+        ).all()
+        assert [(row_id, unit, round(float(value), 2)) for row_id, unit, value in prices] == [
+            (1, 2, 90.91),
+            (2, 2, 100.0),
+            (3, 1, 13.61),
+        ]
+        aliases = dict(connection.execute(text("SELECT raw_text, unit_id FROM unit_aliases")).all())
+        assert aliases == {"Lata/1Kilo": 2, "Kilo": 1}
+
+    command.downgrade(alembic_config(url), "3f7a1c9d2e4b")
+
+    with engine.connect() as connection:
+        first = connection.execute(
+            text("SELECT unit_id, price_per_base_unit FROM prices WHERE id = 1")
+        ).one()
+        assert (first[0], round(float(first[1]), 2)) == (1, 41.24)
+        aliases = dict(connection.execute(text("SELECT raw_text, unit_id FROM unit_aliases")).all())
+        assert aliases == {"Lata/1Kilo": 1, "Kilo": 1}
+    engine.dispose()
