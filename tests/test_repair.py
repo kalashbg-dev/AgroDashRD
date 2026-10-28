@@ -87,11 +87,10 @@ def number(rows):
 
 
 def test_a_market_column_equal_to_another_market_in_the_same_week_is_voided():
-    rows = [retail_row(f"Arroz {i}", "Primera", [20, 21, 22, 23, 24, 100, 100]) for i in range(1, 13)]
+    markets = [20, 21, 22, 23, 24, 100, 100]
+    rows = [retail_row(f"Arroz {i}", "Primera", markets) for i in range(1, 13)]
 
-    voided = nullify_copied_market_columns(
-        number(rows), RETAIL_DATE_COLUMNS, RETAIL_MARKET_COLUMNS
-    )
+    voided = nullify_copied_market_columns(number(rows), RETAIL_DATE_COLUMNS, RETAIL_MARKET_COLUMNS)
 
     assert voided == set(range(2, 14))
     assert [cells[10] for cells in rows] == [None] * 12
@@ -99,47 +98,55 @@ def test_a_market_column_equal_to_another_market_in_the_same_week_is_voided():
 
 
 def test_a_market_column_equal_to_another_market_a_week_earlier_is_voided():
-    rows = [
-        retail_row(f"Arroz {i}", "Primera", [None] * 5 + [100, None]) for i in range(1, 13)
-    ] + [
+    rows = [retail_row(f"Arroz {i}", "Primera", [None] * 5 + [100, None]) for i in range(1, 13)] + [
         retail_row(f"Arroz {i}", "Segunda", [None, None, None, None, 100, None, None])
         for i in range(1, 13)
     ]
 
-    voided = nullify_copied_market_columns(
-        number(rows), RETAIL_DATE_COLUMNS, RETAIL_MARKET_COLUMNS
-    )
+    voided = nullify_copied_market_columns(number(rows), RETAIL_DATE_COLUMNS, RETAIL_MARKET_COLUMNS)
 
     assert voided == set(range(14, 26))
     assert [cells[8] for cells in rows[12:]] == [None] * 12
     assert [cells[9] for cells in rows[:12]] == [100] * 12
 
 
+def test_a_copy_from_the_previous_week_is_found_by_product_with_a_few_cells_edited():
+    # Villa Consuelo dic-2024 S5: the week lists products in another order, adds one,
+    # and the pasted column had cells edited afterwards (75 of 79 still agree).
+    first = [retail_row(f"Arroz {i}", "Cuarta", [None] * 5 + [100 + i, None]) for i in range(20)]
+    second = [
+        retail_row(f"Arroz {i}", "Quinta", [None] * 4 + [999 if i == 3 else 100 + i, None, None])
+        for i in reversed(range(20))
+    ] + [retail_row("Arroz nuevo", "Quinta", [None] * 4 + [50, None, None])]
+
+    voided = nullify_copied_market_columns(
+        number(first + second), RETAIL_DATE_COLUMNS, RETAIL_MARKET_COLUMNS
+    )
+
+    assert voided == set(range(22, 43))
+    assert [cells[9] for cells in first] == [100 + i for i in range(20)]
+
+
 def test_a_market_column_that_differs_from_the_others_is_not_voided():
     rows = [retail_row(f"Arroz {i}", "Primera", [20, 21, 22, 23, 24, 25, 26]) for i in range(1, 13)]
 
-    voided = nullify_copied_market_columns(
-        number(rows), RETAIL_DATE_COLUMNS, RETAIL_MARKET_COLUMNS
-    )
+    voided = nullify_copied_market_columns(number(rows), RETAIL_DATE_COLUMNS, RETAIL_MARKET_COLUMNS)
 
     assert voided == set()
     assert [cells[4] for cells in rows] == [20] * 12
 
 
 def test_a_market_column_with_too_little_overlap_is_not_voided():
-    rows = [
-        retail_row(f"Arroz {i}", "Primera", [None] * 5 + [100, None]) for i in range(1, 10)
-    ] + [
+    rows = [retail_row(f"Arroz {i}", "Primera", [None] * 5 + [100, None]) for i in range(1, 10)] + [
         retail_row(f"Arroz {i}", "Segunda", [None, None, None, None, 100, None, None])
         for i in range(1, 10)
     ]
 
-    voided = nullify_copied_market_columns(
-        number(rows), RETAIL_DATE_COLUMNS, RETAIL_MARKET_COLUMNS
-    )
+    voided = nullify_copied_market_columns(number(rows), RETAIL_DATE_COLUMNS, RETAIL_MARKET_COLUMNS)
 
     assert voided == set()
     assert [cells[8] for cells in rows[9:]] == [100] * 9
+
 
 def test_a_column_repeating_itself_across_weeks_is_not_voided():
     rows = [
@@ -148,9 +155,7 @@ def test_a_column_repeating_itself_across_weeks_is_not_voided():
         for i in range(1, 13)
     ]
 
-    voided = nullify_copied_market_columns(
-        number(rows), RETAIL_DATE_COLUMNS, RETAIL_MARKET_COLUMNS
-    )
+    voided = nullify_copied_market_columns(number(rows), RETAIL_DATE_COLUMNS, RETAIL_MARKET_COLUMNS)
 
     assert voided == set()
     assert [cells[9] for cells in rows] == [100] * 24
@@ -182,10 +187,9 @@ def test_a_wholesale_week_whose_price_column_slid_down_is_quarantined():
 
 
 def test_a_wholesale_week_that_matches_a_sane_following_week_one_row_up_is_quarantined():
-    rows = (
-        wholesale_block("Primera", "Julio", "2025", [None] + [300 + i for i in range(11)])
-        + wholesale_block("Segunda", "Julio", "2025", [300 + i for i in range(12)])
-    )
+    rows = wholesale_block(
+        "Primera", "Julio", "2025", [None] + [300 + i for i in range(11)]
+    ) + wholesale_block("Segunda", "Julio", "2025", [300 + i for i in range(12)])
 
     fired = shifted_price_blocks(number(rows), WHOLESALE_DATE_COLUMNS)
 
@@ -193,26 +197,24 @@ def test_a_wholesale_week_that_matches_a_sane_following_week_one_row_up_is_quara
 
 
 def test_a_regular_wholesale_week_is_not_quarantined():
-    rows = (
-        wholesale_block("Primera", "Junio", "2025", [100 + i for i in range(12)])
-        + wholesale_block("Segunda", "Junio", "2025", [100 + i for i in range(12)])
-    )
+    rows = wholesale_block(
+        "Primera", "Junio", "2025", [100 + i for i in range(12)]
+    ) + wholesale_block("Segunda", "Junio", "2025", [100 + i for i in range(12)])
 
     assert not shifted_price_blocks(number(rows), WHOLESALE_DATE_COLUMNS)
 
 
 def test_a_short_sam_name_priced_overlap_does_not_fire():
-    rows = (
-        wholesale_block("Primera", "Junio", "2025", [100 + i for i in range(6)])
-        + wholesale_block("Segunda", "Junio", "2025", [None] + [100 + i for i in range(5)])
-    )
+    rows = wholesale_block(
+        "Primera", "Junio", "2025", [100 + i for i in range(6)]
+    ) + wholesale_block("Segunda", "Junio", "2025", [None] + [100 + i for i in range(5)])
 
     assert not shifted_price_blocks(number(rows), WHOLESALE_DATE_COLUMNS)
 
 
 def test_a_retail_market_column_that_slid_down_is_voided():
     rows = [
-        retail_row(f"Arroz {i}", "Primera", [500 + i, 510 + i, 520 + i, 530 + i, 540 + i, 550 + i, 560 + i])
+        retail_row(f"Arroz {i}", "Primera", [500 + i + 10 * step for step in range(7)])
         for i in range(12)
     ] + [
         retail_row(f"Arroz {i}", "Segunda", [950 + i, 960 + i, 970 + i, None, None, None, None])
@@ -231,7 +233,7 @@ def test_a_retail_market_column_that_slid_down_is_voided():
 
 def test_the_los_mina_column_marked_by_the_audit_is_voided_without_signal():
     rows = [
-        retail_row(f"Arroz {i}", "Segunda", [20 + i, 30 + i, 40 + i, None, None, None, None], "Agosto", "2017")
+        retail_row(f"Arroz {i}", "Segunda", [20 + i, 30 + i, 40 + i] + [None] * 4, "Agosto", "2017")
         for i in range(12)
     ]
 
@@ -291,7 +293,8 @@ def test_an_unreadable_label_with_a_price_move_stays_unknown():
 
 
 def test_an_unreadable_label_without_a_previous_week_stays_unknown():
-    unit = unit_in_effect(None, [("Referencia mayorista (Mercadom y Mercado Nuevo)", Decimal(2000))], {})
+    reference = "Referencia mayorista (Mercadom y Mercado Nuevo)"
+    unit = unit_in_effect(None, [(reference, Decimal(2000))], {})
 
     assert unit is None
 
@@ -329,8 +332,9 @@ def test_a_retail_row_with_one_unknown_market_cell_still_recovers():
 
 def test_the_ledger_keeps_the_last_sighting_per_market_and_price_type():
     ledger = UnitLedger()
-    ledger.record("mayorista", "ajo", "Referencia mayorista", Decimal(100), object(), BaseUnit.POUND)
-    ledger.record("mayorista", "ajo", "Referencia mayorista", Decimal(120), object(), BaseUnit.POUND)
+    market = "Referencia mayorista"
+    ledger.record("mayorista", "ajo", market, Decimal(100), object(), BaseUnit.POUND)
+    ledger.record("mayorista", "ajo", market, Decimal(120), object(), BaseUnit.POUND)
     ledger.record("minorista", "ajo", "Mercado Nuevo", Decimal(30), object(), BaseUnit.POUND)
 
     assert ledger.last("mayorista", "ajo")["Referencia mayorista"].amount == Decimal(120)
@@ -356,8 +360,10 @@ def test_the_peer_level_ignores_construction_order():
 
 def test_a_month_listed_twice_quarantines_only_the_mislabelled_repeat():
     # Wholesale abril 2023: the second Primera is mayo's Primera, listed again later.
-    april = [wholesale_block(w, "Abril", "2023", [10 * k + i for i in range(6)])
-             for k, w in enumerate(["Primera", "Segunda"], start=1)]
+    april = [
+        wholesale_block(w, "Abril", "2023", [10 * k + i for i in range(6)])
+        for k, w in enumerate(["Primera", "Segunda"], start=1)
+    ]
     may = wholesale_block("Primera", "Mayo", "2023", [900 + i for i in range(6)])
     copy = [r[:5] + ["Primera", "Abril", "2023"] for r in may]
     rows = april[0] + april[1] + copy + may

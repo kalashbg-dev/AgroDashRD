@@ -339,9 +339,7 @@ def series_coverage(session: Session) -> list[SeriesCoverage]:
                 frozen_weeks=(
                     run
                     if (
-                        run := runs.get(
-                            (product_id, market_id, str(price_type), str(base_unit)), 0
-                        )
+                        run := runs.get((product_id, market_id, str(price_type), str(base_unit)), 0)
                     )
                     >= MIN_FROZEN_WEEKS
                     else 0
