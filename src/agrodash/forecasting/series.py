@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import date
 
 import pandas as pd
-from sqlalchemy import func, select
+from sqlalchemy import false, func, select
 from sqlalchemy.orm import Session
 
 from agrodash.catalog.models import BaseUnit, Unit
@@ -135,6 +135,7 @@ def load_training_data(session: Session, keys: Iterable[SeriesKey]) -> TrainingD
         .where(
             Price.source == PriceSource.OFFICIAL,
             Price.status == PriceStatus.VALIDATED,
+            Price.repeated == false(),
             Price.product_id.in_({key.product_id for key in keys.values()}),
         )
     )

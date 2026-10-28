@@ -30,6 +30,8 @@ MIN_AVERAGE_BLOCK_ROWS = 5
 MIN_COPIED_CELLS = 10
 # Share of those shared cells that must agree.
 COPY_AGREEMENT = Decimal("0.9")
+# Share of a week's cells that must repeat the previous week's for a repeated week (G3).
+REPEATED_WEEK_SHARE = Decimal("0.9")
 # Same-name priced rows must repeat the neighboring week's row ABOVE this often, and
 # that week's own row this rarely, before the price column reads as slid (G1).
 MIN_SLID_RATE = 0.40
@@ -182,13 +184,14 @@ def duplicate_block_rows(
       cannot be told, so the whole block goes to quarantine.
     - A block identical to an earlier kept block under another label is a copy too
       (retail Primera noviembre 2022 = Segunda junio 2022). Quarantined blocks are not
-      compared, so the real mayo 2023 Primera survives its mislabelled copy.
+      compared, so the real mayo 2023 Primera survives its mislabelled copy. A copy
+      of the kept week right before is left to repeated_week_rows (G3).
     Blocks under MIN_AVERAGE_BLOCK_ROWS are stray rows, never a week.
     """
     duplicates: set[int] = set()
     labels: set[tuple] = set()
     fingerprints: set[tuple] = set()
-    previous = None
+    previous = previous_fingerprint = None
     for label, block in _blocks_with_numbers(rows, date_columns):
         if len(block) < MIN_AVERAGE_BLOCK_ROWS:
             continue
@@ -202,63 +205,47 @@ def duplicate_block_rows(
             fingerprints.add(fingerprint)
             continue
         previous = label
-        if label in labels or fingerprint in fingerprints:
+        # A copy of the kept week right before is a repeated week (G3), stored and marked.
+        adjacent_copy = fingerprint == previous_fingerprint
+        if label in labels or (fingerprint in fingerprints and not adjacent_copy):
             duplicates.update(row_number for row_number, _ in block)
+            previous_fingerprint = None
             continue
+        previous_fingerprint = fingerprint
         labels.add(label)
         fingerprints.add(fingerprint)
     return duplicates
 
 
 def repeated_week_rows(
-    rows: list[tuple[int, list[object]]], date_columns: tuple[int, ...]
+    rows: list[tuple[int, list[object]]], date_columns: tuple[int, ...], price_columns
 ) -> set[int]:
-    """Row numbers of weeks that are near-copies of the previous week (G3).
+    """Row numbers of weeks that repeat the previous week's prices (G3).
 
-    A week whose prices are ~99% identical to the previous week's is a copy
-    pasted by the analyst. Flagged as "repeated price" for exclusion from
-    forecasting and volatility.
+    Prices compare cell by cell (product x market) against the previous week, across
+    a month change too (wholesale Primera octubre 2024 = Quinta septiembre); a week
+    agreeing on REPEATED_WEEK_SHARE of >=MIN_COPIED_CELLS shared cells was not
+    surveyed again. Each product counts once per week, its first row, so a week that
+    carries the next week pasted below it (retail Cuarta octubre 2022) is no source.
     """
-    # Group rows into blocks by date label.
-    blocks: list[tuple[tuple, list[tuple[int, list[object]]]]] = []
-    current: list[tuple[int, list[object]]] = []
-    prev_label = None
-    for row_number, row in rows:
-        if len(row) <= max(date_columns):
-            current.append((row_number, row))
-            continue
-        lbl = _date_label(row, date_columns)
-        if prev_label is not None and lbl != prev_label:
-            blocks.append((prev_label, current))
-            current = []
-        current.append((row_number, row))
-        prev_label = lbl
-    if current:
-        blocks.append((prev_label, current))
-
     repeated: set[int] = set()
-    for i in range(1, len(blocks)):
-        prev_label, prev_rows = blocks[i - 1]
-        curr_label, curr_rows = blocks[i]
-        # Only compare blocks in the same month and year.
-        if prev_label[1:] != curr_label[1:]:
+    previous = None
+    for _, block in _blocks_with_numbers(rows, date_columns):
+        if len(block) < MIN_AVERAGE_BLOCK_ROWS:
             continue
-        if len(curr_rows) < MIN_AVERAGE_BLOCK_ROWS:
-            continue
-
-        # Build sets of row content (excluding date columns).
-        def _content(row):
-            return tuple(str(cell) for j, cell in enumerate(row) if j not in date_columns)
-
-        prev_set = {_content(row) for _, row in prev_rows if len(row) > max(date_columns)}
-        curr_list = [(_rn, _content(row)) for _rn, row in curr_rows if len(row) > max(date_columns)]
-
-        if not curr_list or not prev_set:
-            continue
-        matched = sum(1 for _, c in curr_list if c in prev_set)
-        if matched / len(curr_list) >= 0.95:
-            for row_number, _ in curr_rows:
-                repeated.add(row_number)
+        cells = {}
+        for _, row in block:
+            product = name_key(str(row[0] or ""))
+            for column in price_columns:
+                value = _comparable(row[column]) if column < len(row) else None
+                if value is not None:
+                    cells.setdefault((product, column), value)
+        if previous is not None:
+            shared = [cell for cell in cells if cell in previous]
+            agreeing = sum(cells[cell] == previous[cell] for cell in shared)
+            if len(shared) >= MIN_COPIED_CELLS and agreeing >= REPEATED_WEEK_SHARE * len(shared):
+                repeated.update(row_number for row_number, _ in block)
+        previous = cells
     return repeated
 
 
