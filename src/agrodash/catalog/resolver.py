@@ -1,6 +1,7 @@
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
+from agrodash.catalog.approved_merges import APPROVED_MERGES
 from agrodash.catalog.models import (
     BaseUnit,
     Market,
@@ -18,6 +19,9 @@ from agrodash.ingestion.normalize import (
     same_product_name,
     word_set_key,
 )
+
+# Canonical name for each approved old name, by name key (audit G7).
+CANONICAL_NAMES = {name_key(old): canon for old, canon in APPROVED_MERGES}
 
 
 class CatalogResolver:
@@ -52,6 +56,15 @@ class CatalogResolver:
             return self._products[key]
         # A bulk find/replace turned '-' into '0' in some product names (G5, Caso 2).
         # If restoring the dash matches an existing product, use that product.
+        canon = CANONICAL_NAMES.get(key)
+        if canon is not None:
+            # An approved old name joins its canonical product, even before it is seen.
+            product = self._products.get(name_key(canon))
+            if product is None:
+                product = self.product(canon, category, base_unit)
+            self._session.add(ProductAlias(raw_name=key, product=product, reviewed=True))
+            self._products[key] = product
+            return product
         repaired_key = name_key(repair_zero_to_dash(raw_name))
         if repaired_key != key and repaired_key in self._products:
             product = self._products[repaired_key]
